@@ -45,13 +45,13 @@ VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
 
 # explicit targets
 
-all: adc125Lib.o
+all: fa125Lib.o
 
 clean:
-	rm -f adc125Lib.o
+	rm -f fa125Lib.o
 
-adc125Lib.o: adc125Lib.c adc125Lib.h
-	$(CC) -c adc125Lib.c
+fa125Lib.o: fa125Lib.c fa125Lib.h
+	$(CC) -c fa125Lib.c
 
 endif
 
@@ -75,27 +75,27 @@ ifdef DEBUG
 CFLAGS			+= -Wall -g
 endif
 
-OBJS			= adc125Lib.o
+OBJS			= fa125Lib.o
 
-LIBS			= libadc125.a
+LIBS			= libfa125.a
 
 all: $(LIBS) links
 
-libadc125.a: adc125Lib.o
-	$(CC) -fpic -shared $(CFLAGS) -o libadc125.so adc125Lib.c
-	$(AR) ruv libadc125.a adc125Lib.o
-	$(RANLIB) libadc125.a
+libfa125.a: fa125Lib.o
+	$(CC) -fpic -shared $(CFLAGS) -o libfa125.so fa125Lib.c
+	$(AR) ruv libfa125.a fa125Lib.o
+	$(RANLIB) libfa125.a
 
 clean distclean:
 	@rm -f $(OBJS) $(LIBS) *.so *~
 
-links: libadc125.a
-	ln -sf $(PWD)/libadc125.a $(LINUXVME_LIB)/libadc125.a
-	ln -sf $(PWD)/libadc125.so $(LINUXVME_LIB)/libadc125.so
-	ln -sf $(PWD)/adc125Lib.h $(LINUXVME_INC)/adc125Lib.h
+links: libfa125.a
+	ln -sf $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
+	ln -sf $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
+	ln -sf $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
 
-%: %.c libadc125.a
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -ladc125
+%: %.c libfa125.a
+	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -lfa125
 
 rol:
 	make -f Makefile-rol
