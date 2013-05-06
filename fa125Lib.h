@@ -24,14 +24,14 @@
  *
  *----------------------------------------------------------------------------*/
 
-#ifndef __ADC125LIB__
-#define __ADC125LIB__
+#ifndef __FA125LIB__
+#define __FA125LIB__
 
 
 
-#define ADC125_MAX_BOARDS             20
+#define FA125_MAX_BOARDS             20
 
-struct adc125_a24_main {
+struct fa125_a24_main {
   volatile const UINT32 id;                 // 0000
   volatile       UINT32 swapctl;            // 0004
   volatile const UINT32 version;            // 0008
@@ -46,7 +46,7 @@ struct adc125_a24_main {
   volatile const UINT32 skipabunch[1008];
 };
 
-struct adc125_a24_fe {
+struct fa125_a24_fe {
   volatile const UINT32 version;            // 0000
   volatile       UINT32 test;               // 0004
   volatile const UINT32 skip1[6];           //
@@ -57,21 +57,21 @@ struct adc125_a24_fe {
   volatile const UINT32 skipabunch[1000];
 };
 
-struct adc125_a24_proc {
+struct fa125_a24_proc {
   volatile const UINT32 version;            // 0000
   volatile       UINT32 csr;
   volatile       UINT32 test2;
   volatile       UINT32 noreg;
 };
 
-struct adc125_a24 {
-  struct adc125_a24_main main;    // 0000 - 0ffc
-  struct adc125_a24_fe   fe[12];  // 1000 - cffc
-  struct adc125_a24_proc proc;    // d000 - dffc (actually could allow to fffc)
+struct fa125_a24 {
+  struct fa125_a24_main main;    // 0000 - 0ffc
+  struct fa125_a24_fe   fe[12];  // 1000 - cffc
+  struct fa125_a24_proc proc;    // d000 - dffc (actually could allow to fffc)
 };
 
 
-struct adc125_a32 {
+struct fa125_a32 {
   volatile const UINT32 thedata;  // placeholder here -- actually will
 				  // be array (multiply-mapped FIFO
 				  // read)
@@ -83,34 +83,34 @@ struct adc125_a32 {
 #define DACCTL_ADACSI_MASK   0x00000004
 #define DACCTL_BDACSI_MASK   0x00000008
 
-/* The FADC125 Address mask, as determined from the slot id */
-#define ADC125_A24_ADDR_MASK   0x00F80000
+/* The FFA125 Address mask, as determined from the slot id */
+#define FA125_A24_ADDR_MASK   0x00F80000
 
-#define ADC125_ID 0xadc12500
+#define FA125_ID 0xfa12500
 
 /* CSR register definitions */
-#define ADC125_CSR_BUSY         1<<0
-#define ADC125_CSR_CLEAR        1<<1
-#define ADC125_CSR_TEST_TRIGGER 1<<2
+#define FA125_CSR_BUSY         1<<0
+#define FA125_CSR_CLEAR        1<<1
+#define FA125_CSR_TEST_TRIGGER 1<<2
 
 /* Define data types and masks */
-#define ADC125_DATA_FORMAT0     0<<13
-#define ADC125_DATA_FORMAT1     1<<13
-#define ADC125_DATA_FORMAT5     5<<13
+#define FA125_DATA_FORMAT0     0<<13
+#define FA125_DATA_FORMAT1     1<<13
+#define FA125_DATA_FORMAT5     5<<13
 
-#define ADC125_DATA_END         0xfe00
-#define ADC125_PAD_WORD         0xf1ea
+#define FA125_DATA_END         0xfe00
+#define FA125_PAD_WORD         0xf1ea
 
-#define ADC125_EVNUM_MASK         0x07f0
-#define ADC125_DATA_CHANNEL_MASK  0xfc00
-#define ADC125_DATA_FORMAT_MASK   0xe000
-#define ADC125_DATA_RAW_MASK      0x3fff
-#define ADC125_DATA_OVERFLOW_MASK 0x8000
+#define FA125_EVNUM_MASK         0x07f0
+#define FA125_DATA_CHANNEL_MASK  0xfc00
+#define FA125_DATA_FORMAT_MASK   0xe000
+#define FA125_DATA_RAW_MASK      0x3fff
+#define FA125_DATA_OVERFLOW_MASK 0x8000
 
 
 /* MASK where each bit corresponds to a unique slot number.
-   each bit is 1 if the ADC125 module exists (with correct firmware) */
-volatile unsigned int ADC125_SLOT_MASK=0;
+   each bit is 1 if the FA125 module exists (with correct firmware) */
+volatile unsigned int FA125_SLOT_MASK=0;
 
 const int DAC_CHAN_OFFSET[72]=
   {34, 33, 32, 39, 38, 37, 36, 27, 26, 25, 24, 31,
@@ -124,23 +124,23 @@ const int DAC_CHAN_PULSER[3]={35, 19, 11};
 
 const int DAC_CHAN_MULTH=3;
 
-struct adc125_handle {
-  struct adc125_a24 *a24;
-  struct adc125_a32 *a32;
+struct fa125_handle {
+  struct fa125_a24 *a24;
+  struct fa125_a32 *a32;
 };
 
-int  adc125Init (UINT32 addr, int iFlag);
-void adc125PowerOff(int id);
-void adc125PowerOn(int id);
-void adc125SetLTC2620(int id, int dacChan, int dacData);
-void adc125SetOffset(int id, int chan, int dacData);
-int  adc125SetOffsetFromFile(int id, char *filename);
-void adc125SetPulserAmplitude(int id, int chan, int dacData);
-void adc125SetMulThreshold(int id, int dacData);
-void adc125PrintTemps(int id);
-int  adc125Poll(int id);
-unsigned int adc125GetBerrCount();
-void adc125Clear(int id);
-int  adc125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
+int  fa125Init (UINT32 addr, int iFlag);
+void fa125PowerOff(int id);
+void fa125PowerOn(int id);
+void fa125SetLTC2620(int id, int dacChan, int dacData);
+void fa125SetOffset(int id, int chan, int dacData);
+int  fa125SetOffsetFromFile(int id, char *filename);
+void fa125SetPulserAmplitude(int id, int chan, int dacData);
+void fa125SetMulThreshold(int id, int dacData);
+void fa125PrintTemps(int id);
+int  fa125Poll(int id);
+unsigned int fa125GetBerrCount();
+void fa125Clear(int id);
+int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
 
-#endif /* __ADC125LIB__ */
+#endif /* __FA125LIB__ */
