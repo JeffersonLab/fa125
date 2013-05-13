@@ -17,8 +17,8 @@
  *----------------------------------------------------------------------------*
  *
  * Description:
- *     Initial/development version of driver library and test code for 
- *     IU 125MSPS ADC for GlueX / Hall D
+ *     Driver library for readout of the 125MSPS ADC using vxWorks 5.5 
+ *     (or later) or Intel based single board computer
  *
  * SVN: $Rev$
  *
@@ -57,22 +57,36 @@ pthread_mutex_t    fa125Mutex = PTHREAD_MUTEX_INITIALIZER;
 int nfa125=0;
 volatile struct fa125_a24 *fa125p[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 memory map */
 volatile struct fa125_a32 *fa125pd[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 FIFO memory */
+volatile unsigned int *FA125pmb;                        /* pointer to Multblock window */
 int fa125ID[FA125_MAX_BOARDS]; /* array of slot numbers for FA125s */
+int fa125A32Base   = 0x08000000;                      /* Minimum VME A32 Address for use by FA125s */
+int fa125A32Offset = 0x08000000;                      /* Difference in CPU A32 Base - VME A32 Base */
 int fa125A24Offset=0;                            /* Difference in CPU A24 Base and VME A24 Base */
-unsigned int fadcAddrList[FA_MAX_BOARDS];            /* array of a24 addresses for FA125s */
+unsigned int fa125AddrList[FA125_MAX_BOARDS];            /* array of a24 addresses for FA125s */
+int fa125MaxSlot=0;                                   /* Highest Slot hold an FA125 */
+int fa125MinSlot=0;                                   /* Lowest Slot holding an FA125 */
 int berr_count=0; /* A count of the number of BERR that have occurred when running fa125Poll() */
-
-#define FA125A24BA 0xa10000   /* just hardcode here for now */
 
 /*******************************************************************************
  *
- * fa125Init - Initialize IO 125MSPS ADC Library
- *
- *   Initialize a single FA125 at the specified VME A24.  Only one
- *   module is supported at the moment. (More to be supported through
- *   other routines)
+ * fa125Init - Initialize the fa125 Library
  *
  *   iFlag: 17 bit integer
+ *       Low 6 bits - Specifies the default Signal distribution (clock,trigger) 
+ *                    sources for the board (Internal, FrontPanel, VXS, VME(Soft))
+ *       bit    0:  defines Sync Reset source
+ *                    NOT USED WITH THIS FIRMWARE VERSION
+ *       bits 2-1:  defines Trigger source
+ *           (0) 0 0  P2 Connector (Backplane)
+ *           (1) 0 1  Internal Timer
+ *           (2) 1 0  Internal Multiplicity Sum
+ *           (3) 1 1  VXS (P0)
+ *       bit    3:  NOT USED WITH THIS FIRMWARE VERSION
+ *       bits 5-4:  defines Clock Source
+ *           (0) 0 0  P2 Connector (Backplane)
+ *           (1) 0 1  VXS (P0)
+ *           (2) 1 0  Internal 125MHz Clock
+ *
  *     16:  Exit before board initialization (just map structure pointer)
  *          0: Initialize fa125(s)
  *          1: Skip initialization
@@ -88,11 +102,14 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 {
   int res;
   volatile unsigned int rdata=0;
-  unsigned int laddr;
+  unsigned int laddr;//, a32addr;
   volatile struct fa125_a24 *fa125;
   int useList=0, noBoardInit=0;
   int nfind=0, islot=0, FA_SLOT=0;
+  int trigSrc=0, clkSrc=0, srSrc=0;
   unsigned int boardID=0;
+  int maxSlot = 1;
+  int minSlot = 21;
 
   /* Check if we're skipping initialization, and just mapping the structure pointer */
   if(iFlag & (1<<16))
@@ -144,7 +161,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 #ifdef VXWORKS
   res = sysBusToLocalAdrs(0x39,(char *)fa125AddrList[0],(char **)&laddr);
 #else
-  res = vmeBusToLocalAdrs(0x39,(char *)fa125AddrList[0],&laddr);
+  res = vmeBusToLocalAdrs(0x39,(char *)fa125AddrList[0],(char **)&laddr);
 #endif
   if (res != 0) 
     {
@@ -182,18 +199,31 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	  if( ((rdata) != FA125_ID) &&
 	      ((rdata) != LSWAP(FA125_ID)) )
 	    {
-	      printf("%s: ERROR: Invalid Board ID: 0x%x\n",
-		     __FUNCTION__,rdata);
+	      printf("%s: ERROR: For module at 0x%x, Invalid Board ID: 0x%x\n",
+		     __FUNCTION__,fa125AddrList[islot]-fa125A24Offset,rdata);
+	      continue;
 	    }
 	  else
 	    {
 	      /* get the Geographic Address */
-	      boardID = islot; /* Hack until we get a register that tells us */
+	      boardID = fa125->main.slot_ga;
+	      if((boardID&FA125_SLOT_GA_MASK)==0) 
+		boardID = LSWAP(boardID); /* Byte swap, if necessary */
+
+	      if((boardID<2) || (boardID>21))
+		{
+		  printf("%s: For module at 0x%x, Invalid Slot Number %d\n",
+			 __FUNCTION__,fa125AddrList[islot]-fa125A24Offset,boardID);
+		  continue;
+		}
+	      if(boardID >= maxSlot) maxSlot = boardID;
+	      if(boardID <= minSlot) minSlot = boardID;
+
 	      fa125p[boardID] = (struct fa125_a24 *) fa125AddrList[islot];
 	      fa125ID[nfa125] = boardID;
 
 	      printf("Initialized FA125 %2d  Slot # %2d at address 0x%08x (0x%08x)\n",
-		     __FUNCTION__,nfa125,fa125ID[nfa125],
+		     nfa125,fa125ID[nfa125],
 		     (unsigned int)fa125p[fa125ID[nfa125]],
 		     (unsigned int)fa125p[fa125ID[nfa125]] - fa125A24Offset);
 	      
@@ -220,20 +250,36 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       return ERROR;
     }
 
+  /* Determine the clock, sync, trigger configuration */
+  /* Sync Reset */
+  srSrc = 0;
+
+  /* Trigger */
+  trigSrc = (iFlag&0x6)>>1;
+
+  /* Clock Source */
+  clkSrc = (iFlag&0x30)>>4;
+
   /* Perform some initialization here */
   for(islot=0; islot<nfa125; islot++)
     {
       FA_SLOT = fa125ID[islot];
-      fa125Clear(FA_SLOT);
-      
 #ifdef VXWORKS
       /* Turn off hardware byte swapping for vxWorks */
-      fa125SetByteSwap(0);
+      fa125SetByteSwap(FA_SLOT,0);
 #else
       /* Turn on hardware byte swapping for Linux */
-      fa125SetByteSwap(1);
+      fa125SetByteSwap(FA_SLOT,1);
 #endif
 
+      fa125Clear(FA_SLOT);
+
+      /* Set the clock source */
+      fa125SetClockSource(FA_SLOT,clkSrc);
+
+      /* Set the trigger source */
+      fa125p[FA_SLOT]->proc.csr = (trigSrc>>2);
+      
       /* Eventually toss this into fa125Status(...) */
       printf("  ID is 0x%08x\n",fa125p[FA_SLOT]->main.id);
       printf("  Main FPGA firmware version is %d\n",fa125p[FA_SLOT]->main.version);
@@ -244,6 +290,54 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	     fa125p[FA_SLOT]->main.serial[3]);
       printf("  Processor FPGA firmware version is %d\n",fa125p[FA_SLOT]->proc.version);
     }
+
+#ifdef FUTURE_FIRMWARE
+  // FUTURE_FIRMWARE: This stuff will be refined once the fa125s support
+  //  the token passing multiblock addressing
+  /* If there are more than 1 FA125 in the crate then setup the Muliblock Address
+     window. This must be the same on each board in the crate */
+  if(nfadc > 1) 
+    {
+      a32addr = fa125A32Base + (nfa125+1)*FA125_MAX_A32_MEM; /* set MB base above individual board base */
+#ifdef VXWORKS
+      res = sysBusToLocalAdrs(0x09,(char *)a32addr,(char **)&laddr);
+      if (res != 0) 
+	{
+	  printf("%s: ERROR in sysBusToLocalAdrs(0x09,0x%x,&laddr) \n",__FUNCTION__,a32addr);
+	  return(ERROR);
+	}
+#else
+      res = vmeBusToLocalAdrs(0x09,(char *)a32addr,(char **)&laddr);
+      if (res != 0) 
+	{
+	  printf("%s: ERROR in vmeBusToLocalAdrs(0x09,0x%x,&laddr) \n",__FUNCTION__,a32addr);
+	  return(ERROR);
+	}
+#endif
+      FA125pmb = (unsigned int *)(laddr);  /* Set a pointer to the FIFO */
+      if(!noBoardInit)
+	{
+	  for (ii=0;ii<nfa125;ii++) 
+	    {
+	      /* Write the register and enable FIXME... not defined yet */
+	      vmeWrite32(&(FAp[fadcID[ii]]->adr_mb),
+			(a32addr+FA_MAX_A32MB_SIZE) + (a32addr>>16) + FA_A32_ENABLE);
+	    }
+	}    
+      /* Set First Board and Last Board */
+      fa125MaxSlot = maxSlot;
+      fa125MinSlot = minSlot;
+      if(!noBoardInit)
+	{
+	  /* FIXME... not defined yet */
+	  vmeWrite32(&(FAp[minSlot]->ctrl1),
+		    vmeRead32(&(FAp[minSlot]->ctrl1)) | FA_FIRST_BOARD);
+	  vmeWrite32(&(FAp[maxSlot]->ctrl1),
+		    vmeRead32(&(FAp[maxSlot]->ctrl1)) | FA_LAST_BOARD);
+	}    
+    }
+#endif /* FUTURE_FIRMWARE */
+
 
   return(OK);
 
@@ -262,120 +356,14 @@ fa125SetByteSwap(int id, int enable)
 
   FA125LOCK;
   if(enable)
-    fa125p[id]->main.swapct = 0xffffffff;
+    fa125p[id]->main.swapctl = 0xffffffff;
   else
-    fa125p[id]->main.swapct = 0;
+    fa125p[id]->main.swapctl = 0;
   FA125UNLOCK;
 
   return OK;
 }
 
-/*******************************************************************************
- *
- * fa125Slot2VmeAdrs - Determine VME Address from Crate Slot number
- *
- *    - Numerically convert a FA125 slot number into the expected A24 VME address
- *      The slot number is encoded as the Most Significant 5 bits of the A24 address
- *      determined by its GEOADDR at boottime.
- */
-
-unsigned int
-fa125Slot2VmeAdrs (int crateslot)
-{
-  unsigned int rval;
-
-  if(crateslot<2 || crateslot>21)
-    {
-      printf("%s: Invalid slot number %d.\n",
-	     __FUNCTION__,crateslot);
-      rval =  0;
-    }
-  else
-    {
-      rval = (crateslot<<19)&FA125_A24_ADDR_MASK;
-    }
-
-  return rval;
-}
-
-/*******************************************************************************
- *
- * fa125GetSlotMask - Determine physical slot mask
- *
- *    - Brute force method of determining which FA125s exist in the crate
- *      and forming the FA125_SLOT_MASK.  This method increments from Slot 2 to 21
- *      determining if a FA125 returns the correct firmware.  If the firmware is
- *      incorrect or a BUS ERROR is returned, the slot in question will not be included
- *      in the FA125_SLOT_MASK.
- */
-
-unsigned int
-fa125GetSlotMask()
-{
-  unsigned int islot, addr, laddr;
-  int res, rdata=0;
-  volatile struct fa125_a24 *fa125;
-
-  /* Loop over each slot*/
-  for(islot=2; islot<22; islot++)
-    {
-      addr = fa125Slot2VmeAdrs(islot);
-      if( (addr==0) || (addr > 0x00ffffff) ) 
-	{
-	  /* This should happen... but just in case */
-	  printf("%s: ERROR: Invalid address (0x%8x) for slot %d\n",
-		 __FUNCTION__,addr,islot);
-	  continue;
-	}
-      else
-	{
-	  /* get the USERSPACE address from the VME A24 Address */
-#ifdef VXWORKS
-	  res = sysBusToLocalAdrs(0x39,(char *)addr,(char **)&laddr);
-#else
-	  res = vmeBusToLocalAdrs(0x39,(char *)addr,(char **)&laddr);
-#endif
-	  if (res != 0) /* Indication of bad map in {sys,vme}BusToLocalAdrs */
-	    {
-	      /* This should happen... but just in case */
-	      printf("%s: ERROR in sysBusToLocalAdrs(0x39,0x%x,&laddr) \n",
-		     __FUNCTION__,addr);
-	      continue;
-	    }
-	  fa125 = (volatile struct fa125_a24 *)(laddr);
-	  /* Check if Board exists at that address */
-#ifdef VXWORKS
-	  res = vxMemProbe((char *) &(fa125->main.id),VX_READ,4,(char *)&rdata);
-#else
-	  res = vmeMemProbe((char *) &(fa125->main.id),4,(char *)&rdata);
-#endif
-	  if(res < 0) 
-	    {
-	      /* Bus Error... nothing at that address */
-	      continue;
-	    } 
-	  else 
-	    {
-	      /* Check that it is an FA125 (using ID) */
-	      if((rdata) != FA125_ID) 
-		{
-		  printf(" ERROR: Slot %d: Invalid Board ID: 0x%x\n",
-			 islot,rdata);
-		  continue;
-		}
-	      else
-		{
-		  FA125_SLOT_MASK |= 1<<(islot-1);
-		}
-
-	    } /* valid VME read */
-
-	} /* valid a24 address */
-
-    } /* for islot loop */
-
-  return FA125_SLOT_MASK;
-}
 
 /*******************************************************************************
  *
@@ -422,7 +410,7 @@ fa125PowerOff (int id)
  *
  */
 
-void 
+int
 fa125PowerOn (int id) 
 {
   if(id==0) id=fa125ID[0];
@@ -430,11 +418,11 @@ fa125PowerOn (int id)
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
     {
       printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
-      return;
+      return ERROR;
     }
 
   printf("%s: Power On (0x%08x) for slot %d\n",__FUNCTION__,
-	 PWRCTL_KEY_ON,id);
+	 FA125_PWRCTL_KEY_ON,id);
 #ifdef DEBUG
   printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
 	 ((unsigned int) &fa125p[id]->main.pwrctl) -
@@ -443,7 +431,7 @@ fa125PowerOn (int id)
 #endif
 
   FA125LOCK;
-  fa125p[id]->main.pwrctl = PWRCTL_KEY_ON;
+  fa125p[id]->main.pwrctl = FA125_PWRCTL_KEY_ON;
   FA125UNLOCK;
 
 #ifdef DEBUG
@@ -458,6 +446,8 @@ fa125PowerOn (int id)
 #else
   usleep(300000);         // delay 300 ms for stable power;
 #endif
+  
+  return OK;
 }
 
 /*******************************************************************************
@@ -486,11 +476,11 @@ fa125SetTestTrigger (int id, int mode)
   FA125LOCK;
   if(mode==0) /* turn test trigger off */
     {
-      fa125p[id]->main.csr &= ~FA125_CSR_TEST_TRIGGER;
+      fa125p[id]->main.csr &= ~FA125_MAIN_CSR_TEST_TRIGGER;
     }
   else if(mode==1) /* turn test trigger on */
     {
-      fa125p[id]->main.csr |= FA125_CSR_TEST_TRIGGER;
+      fa125p[id]->main.csr |= FA125_MAIN_CSR_TEST_TRIGGER;
     }
   FA125UNLOCK;
 
@@ -529,13 +519,13 @@ fa125SetLTC2620 (int id, int dacChan, int dacData)
 
   if (dacChan>=40) 
     {
-      bmask=DACCTL_DACCS_MASK|DACCTL_ADACSI_MASK; // these assserted for the duration
-      dmask=DACCTL_BDACSI_MASK;                      // this is the data bit mask
+      bmask=FA125_DACCTL_DACCS_MASK|FA125_DACCTL_ADACSI_MASK; // these assserted for the duration
+      dmask=FA125_DACCTL_BDACSI_MASK;                      // this is the data bit mask
     }
   else 
     {
-      bmask=DACCTL_DACCS_MASK|DACCTL_BDACSI_MASK; // these assserted for the duration
-      dmask=DACCTL_ADACSI_MASK;                      // this is the data bit mask
+      bmask=FA125_DACCTL_DACCS_MASK|FA125_DACCTL_BDACSI_MASK; // these assserted for the duration
+      dmask=FA125_DACCTL_ADACSI_MASK;                      // this is the data bit mask
     }
 
   FA125LOCK;
@@ -544,7 +534,7 @@ fa125SetLTC2620 (int id, int dacChan, int dacData)
       {
 	x = bmask | ( ((sdat[k]>>j)&1)!=0 ? dmask : 0 );
 	fa125p[id]->main.dacctl = x;
-	fa125p[id]->main.dacctl = x | DACCTL_DACSCLK_MASK;
+	fa125p[id]->main.dacctl = x | FA125_DACCTL_DACSCLK_MASK;
       }
 
   fa125p[id]->main.dacctl = 0;  // this deasserts CS, setting the DAC
@@ -563,6 +553,16 @@ int
 fa125SetOffset (int id, int chan, int dacData) 
 {
   int rval=0;
+  const int DAC_CHAN_OFFSET[72] =
+    {
+      34, 33, 32, 39, 38, 37, 36, 27, 26, 25, 24, 31,
+      74, 73, 72, 79, 78, 77, 76, 67, 66, 65, 64, 71,
+      30, 29, 28, 18, 17, 16, 23, 22, 21, 20, 10, 9,
+      70, 69, 68, 58, 57, 56, 63, 62, 61, 60, 50, 49,
+      8, 15, 14, 13, 12, 2, 1, 0, 7, 6, 5, 4,
+      48, 55, 54, 53, 52, 42, 41, 40, 47, 46, 45, 44
+    };
+
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -643,6 +643,8 @@ int
 fa125SetPulserAmplitude (int id, int chan, int dacData) 
 {
   int rval=0;
+  const int DAC_CHAN_PULSER[3]={35, 19, 11};
+
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -672,6 +674,8 @@ int
 fa125SetMulThreshold(int id, int dacData) 
 {
   int rval=0;
+  const int DAC_CHAN_MULTH=3;
+
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -713,6 +717,64 @@ fa125PrintTemps(int id)
 	 __FUNCTION__,
 	 temp1,
 	 temp2);
+
+  return OK;
+}
+
+/*******************************************************************************
+ *
+ * fa125SetClockSource - Set the clock source
+ *
+ *   This routine should be used in the case that the source clock
+ *   is NOT set in faInit (and defaults to Internal).  Such is the case
+ *   when clocks are synchronized in a many crate system.  The clock source
+ *   of the FADC should ONLY be set AFTER those clocks have been set and
+ *   synchronized.
+ *
+ *   clksrc: defines Clock Source
+ *           0  P2 Clock
+ *           1  VXS (P0)
+ *           2  Internal 125MHz Clock
+ *
+ */
+
+int
+fa125SetClockSource(int id, int clksrc)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if(clksrc>2)
+    {
+      printf("%s: ERROR: Invalid Clock Source specified (%d)\n",
+	     __FUNCTION__,clksrc);
+      return ERROR;
+    }
+
+  switch(clksrc)
+    {
+    case 0: /* P2 Clock */
+      clksrc = FA125_CLOCK_P2;
+      break;
+
+    case 1: /* VXS (P0) Clock */
+      clksrc = FA125_CLOCK_P0;
+      break;
+
+    case 2: /* Internal Clock */
+    default:
+      clksrc = FA125_CLOCK_INTERNAL;
+      break;
+    }
+
+  FA125LOCK;
+  fa125p[id]->main.clock = clksrc;
+  FA125UNLOCK;
 
   return OK;
 }
@@ -764,7 +826,7 @@ fa125Poll(int id)
       return 0;
     }
 
-  if(rval&FA125_CSR_BUSY)
+  if(rval&FA125_PROC_CSR_BUSY)
     {
 /*       logMsg("%s: poll = 1, nzero = %6d\n",__FUNCTION__,nzero,3,4,5,6); */
       nzero=0;
@@ -796,7 +858,7 @@ fa125GetBerrCount()
  *
  */
 
-void
+int
 fa125Clear(int id)
 {
   if(id==0) id=fa125ID[0];
@@ -804,14 +866,15 @@ fa125Clear(int id)
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
     {
       logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id,3,4,5,6);
-      return;
+      return ERROR;
     }
 
   FA125LOCK;
-  fa125p[id]->proc.csr=FA125_CSR_CLEAR;
+  fa125p[id]->proc.csr=FA125_PROC_CSR_CLEAR;
   fa125p[id]->proc.csr=0;
   FA125UNLOCK;
 
+  return OK;
 }
 
 /**************************************************************************************

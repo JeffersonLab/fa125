@@ -16,32 +16,26 @@
 # 
 #  SVN: $Rev$
 #
-#DEBUG=1
-#ARCH=Linux
-
-ifndef OSTYPE
-  OSTYPE := $(subst -,_,$(shell uname))
-endif
-
-
-ifeq ($(OSTYPE),SunOS)
-LIBS = 
-EXTRA =
-endif
+DEBUG=1
 
 ifndef ARCH
-  ARCH=VXWORKSPPC
+	ifdef LINUXVME_LIB
+		ARCH=Linux
+	else
+		ARCH=VXWORKSPPC
+	endif
 endif
+
 
 # Defs and build for VxWorks
 ifeq ($(ARCH),VXWORKSPPC)
 
 VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
 
-  DEFS   = -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall -fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
-  INCS   = -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
-  CC     = ccppc $(INCS) $(DEFS)
-  LD     = ldppc
+DEFS   = -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall -fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
+INCS   = -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
+CC     = ccppc $(INCS) $(DEFS)
+LD     = ldppc
 
 # explicit targets
 
@@ -58,21 +52,19 @@ endif
 # Defs and build for Linux
 ifeq ($(ARCH),Linux)
 
-ifndef LINUXVME_LIB
-	LINUXVME_LIB	= ${CODA}/extensions/linuxvme/libs
-endif
-ifndef LINUXVME_INC
-	LINUXVME_INC	= ${CODA}/extensions/linuxvme/include
-endif
+LINUXVME_LIB		?= ${CODA}/extensions/linuxvme/libs
+LINUXVME_INC		?= ${CODA}/extensions/linuxvme/include
 
 CROSS_COMPILE           = 
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -O2 -I. -I${LINUXVME_INC} -I/usr/include \
+CFLAGS			= -I. -I${LINUXVME_INC} -I/usr/include \
 			  -L${LINUXVME_LIB} -L.
 ifdef DEBUG
 CFLAGS			+= -Wall -g
+else
+			+= -O2
 endif
 
 OBJS			= fa125Lib.o
