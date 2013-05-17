@@ -343,6 +343,29 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
 }
 
+/*******************************************************************************
+ *
+ * fa125Slot - Convert an index into a slot number, where the index is
+ *          the element of an array of FA125s in the order in which they were
+ *          initialized.
+ *
+ * RETURNS: Slot number if Successfull, otherwise ERROR.
+ *
+ */
+
+int
+fa125Slot(unsigned int i)
+{
+  if(i>=nfa125)
+    {
+      printf("%s: ERROR: Index (%d) >= FA125s initialized (%d).\n",
+	     __FUNCTION__,i,nfa125);
+      return ERROR;
+    }
+
+  return fa125ID[i];
+}
+
 int
 fa125SetByteSwap(int id, int enable)
 {

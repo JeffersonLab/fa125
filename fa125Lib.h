@@ -128,6 +128,7 @@ struct fa125_a32
 #define FA125_DATA_OVERFLOW_MASK 0x8000
 
 int  fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
+int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
