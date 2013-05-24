@@ -65,6 +65,7 @@ int fa125A24Offset=0;                            /* Difference in CPU A24 Base a
 unsigned int fa125AddrList[FA125_MAX_BOARDS];            /* array of a24 addresses for FA125s */
 int fa125MaxSlot=0;                                   /* Highest Slot hold an FA125 */
 int fa125MinSlot=0;                                   /* Lowest Slot holding an FA125 */
+int fa125TriggerSource=0;
 int berr_count=0; /* A count of the number of BERR that have occurred when running fa125Poll() */
 
 /*******************************************************************************
@@ -77,10 +78,10 @@ int berr_count=0; /* A count of the number of BERR that have occurred when runni
  *       bit    0:  defines Sync Reset source
  *                    NOT USED WITH THIS FIRMWARE VERSION
  *       bits 2-1:  defines Trigger source
- *           (0) 0 0  P2 Connector (Backplane)
+ *           (0) 0 0  VXS (P0)
  *           (1) 0 1  Internal Timer
  *           (2) 1 0  Internal Multiplicity Sum
- *           (3) 1 1  VXS (P0)
+ *           (3) 1 1  P2 Connector (Backplane)
  *       bit    3:  NOT USED WITH THIS FIRMWARE VERSION
  *       bits 5-4:  defines Clock Source
  *           (0) 0 0  P2 Connector (Backplane)
@@ -107,7 +108,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   int useList=0, noBoardInit=0;
   int nfind=0, islot=0, FA_SLOT=0;
   int trigSrc=0, clkSrc=0, srSrc=0;
-  unsigned int boardID=0;
+  unsigned int boardID=0, fw_version=0;
   int maxSlot = 1;
   int minSlot = 21;
 
@@ -117,7 +118,10 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
   /* Check if we're initializing using a list */
   if(iFlag & (1<<17))
-    useList=1;
+    {
+      useList=1;
+      nfind = nadc;
+    }
 
   /* Check for valid address */
   if((addr==0) && (useList==0))
@@ -180,7 +184,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   for(islot=0; islot<nfind; islot++)
     {
       
-      fa125 = (volatile struct fa125_a24 *)(fa125AddrList[islot]);
+      fa125 = (volatile struct fa125_a24 *)(fa125AddrList[islot]+fa125A24Offset);
       /* Check if Board exists at that address */
 #ifdef VXWORKS
       res = vxMemProbe((char *) &(fa125->main.id),VX_READ,4,(char *)&rdata);
@@ -190,7 +194,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       if(res < 0) 
 	{
 	  printf("%s: ERROR: No addressable board at addr=0x%x\n",
-		 __FUNCTION__,(UINT32) fa125);
+		 __FUNCTION__,(UINT32) fa125AddrList[islot]);
 	}
       else 
 	{
@@ -200,26 +204,60 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	      ((rdata) != LSWAP(FA125_ID)) )
 	    {
 	      printf("%s: ERROR: For module at 0x%x, Invalid Board ID: 0x%x\n",
-		     __FUNCTION__,fa125AddrList[islot]-fa125A24Offset,rdata);
+		     __FUNCTION__,fa125AddrList[islot],rdata);
 	      continue;
 	    }
 	  else
 	    {
-	      /* get the Geographic Address */
+	      /* Turn on hardware byteswapping, if needed */
+#ifdef VXWORKS
+	      fa125->main.swapctl = 0;
+#else
+	      fa125->main.swapctl = 0xffffffff;
+#endif
+
+	      /* Check the Firmware Versions */
+	      /* MAIN */
+	      fw_version = fa125->main.version;
+	      if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
+		{
+		  printf("%s: ERROR: For module at 0x%x, Unsupported MAIN firmware version 0x%x\n",
+			 __FUNCTION__,fa125AddrList[islot],fw_version);
+		  continue;
+		}
+
+	      /* PROC */
+	      fw_version = fa125->proc.version;
+	      if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
+		{
+		  printf("%s: ERROR: For module at 0x%x, Unsupported PROC firmware version 0x%x\n",
+			 __FUNCTION__,fa125AddrList[islot],fw_version);
+		  continue;
+		}
+
+	      /* FE - just check the first one */
+	      fw_version = fa125->fe[0].version;
+	      if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
+		{
+		  printf("%s: ERROR: For module at 0x%x, Unsupported FE firmware version 0x%x\n",
+			 __FUNCTION__,fa125AddrList[islot],fw_version);
+		  continue;
+		}
+
+	      /* Get the Geographic Address */
 	      boardID = fa125->main.slot_ga;
-	      if((boardID&FA125_SLOT_GA_MASK)==0) 
-		boardID = LSWAP(boardID); /* Byte swap, if necessary */
 
 	      if((boardID<2) || (boardID>21))
 		{
 		  printf("%s: For module at 0x%x, Invalid Slot Number %d\n",
-			 __FUNCTION__,fa125AddrList[islot]-fa125A24Offset,boardID);
+			 __FUNCTION__,fa125AddrList[islot],boardID);
 		  continue;
 		}
+
 	      if(boardID >= maxSlot) maxSlot = boardID;
 	      if(boardID <= minSlot) minSlot = boardID;
 
-	      fa125p[boardID] = (struct fa125_a24 *) fa125AddrList[islot];
+	      fa125p[boardID] = (struct fa125_a24 *) (fa125AddrList[islot]+fa125A24Offset);
 	      fa125ID[nfa125] = boardID;
 
 	      printf("Initialized FA125 %2d  Slot # %2d at address 0x%08x (0x%08x)\n",
@@ -256,6 +294,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
   /* Trigger */
   trigSrc = (iFlag&0x6)>>1;
+  fa125TriggerSource = trigSrc;
 
   /* Clock Source */
   clkSrc = (iFlag&0x30)>>4;
@@ -278,17 +317,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       fa125SetClockSource(FA_SLOT,clkSrc);
 
       /* Set the trigger source */
-      fa125p[FA_SLOT]->proc.csr = (trigSrc>>2);
+      fa125SetTriggerSource(FA_SLOT,fa125TriggerSource);
       
-      /* Eventually toss this into fa125Status(...) */
-      printf("  ID is 0x%08x\n",fa125p[FA_SLOT]->main.id);
-      printf("  Main FPGA firmware version is %d\n",fa125p[FA_SLOT]->main.version);
-      printf("  Main board serial 0x%04x%08x / mezzanine board serial 0x%04x%08x\n",
-	     fa125p[FA_SLOT]->main.serial[0]&0x0000ffff,
-	     fa125p[FA_SLOT]->main.serial[1],
-	     fa125p[FA_SLOT]->main.serial[2]&0x0000ffff,
-	     fa125p[FA_SLOT]->main.serial[3]);
-      printf("  Processor FPGA firmware version is %d\n",fa125p[FA_SLOT]->proc.version);
     }
 
 #ifdef FUTURE_FIRMWARE
@@ -338,6 +368,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
     }
 #endif /* FUTURE_FIRMWARE */
 
+  if(nfa125 > 0)
+    printf("%s: %d FA125(s) successfully initialized\n",__FUNCTION__,nfa125);
 
   return(OK);
 
@@ -364,6 +396,103 @@ fa125Slot(unsigned int i)
     }
 
   return fa125ID[i];
+}
+
+int
+fa125Status(int id)
+{
+  unsigned int main_id, main_swapctl, main_version, main_pwrctl;
+  unsigned int main_slot_ga, main_clock;
+  unsigned int main_serial[2], mezz_serial[2];
+  unsigned int fe_version;
+  unsigned int proc_version;
+  unsigned int proc_csr;
+  unsigned int proc_trigsrc;
+  unsigned int clksrc;
+  unsigned int trigsrc;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  main_id = fa125p[id]->main.id;
+  main_swapctl = fa125p[id]->main.swapctl;
+  main_version = fa125p[id]->main.version;
+#ifdef DOESNOTEXIST
+  main_csr = fa125p[id]->main.csr;
+#endif
+  main_pwrctl = fa125p[id]->main.pwrctl;
+  main_slot_ga = fa125p[id]->main.slot_ga;
+  main_clock = fa125p[id]->main.clock;
+
+  main_serial[0] = fa125p[id]->main.serial[0];
+  main_serial[1] = fa125p[id]->main.serial[1];
+  mezz_serial[0] = fa125p[id]->main.serial[2];
+  mezz_serial[1] = fa125p[id]->main.serial[3];
+
+  fe_version = fa125p[id]->fe[0].version;
+
+  proc_version = fa125p[id]->proc.version;
+  proc_csr     = fa125p[id]->proc.csr;
+  proc_trigsrc = fa125p[id]->proc.trigsrc;
+  FA125UNLOCK;
+
+  #ifdef VXWORKS
+  printf("\nSTATUS for FA125 in slot %d at base address 0x%x \n",
+	 id, (UINT32) fa125p[id]);
+#else
+  printf("\nSTATUS for FA125 in slot %d at VME (Local) base address 0x%x (0x%x)\n",
+	 id, (UINT32) fa125p[id] - fa125A24Offset, (UINT32) fa125p[id]);
+#endif
+  printf("---------------------------------------------------------------------- \n");
+  printf(" Main Firmware Revision     = 0x%08x\n",
+	 main_version);
+  printf(" FrontEnd Firmware Revision = 0x%08x\n",
+	 fe_version);
+  printf(" Processing Revision        = 0x%08x\n",
+	 proc_version);
+
+  printf("      Main SN = 0x%04x%08x\n",main_serial[0], main_serial[1]);
+  printf(" Mezzanine SN = 0x%04x%08x\n",mezz_serial[0], mezz_serial[1]);
+  
+  /* POWER */
+  if(main_pwrctl)
+    printf(" Power is ON\n");
+  else
+    printf(" Power is OFF\n");
+
+  /* CLOCK */
+  printf(" Clock Source (0x%x):",main_clock);
+  clksrc = main_clock & 0xffff;
+  if(clksrc == FA125_CLOCK_P2)
+    printf(" P2\n");
+  else if (clksrc == FA125_CLOCK_P0)
+    printf(" P0 (VXS)\n");
+  else if (clksrc == FA125_CLOCK_INTERNAL)
+    printf(" Internal\n");
+  else
+    printf(" ????\n");
+
+  /* TRIGGER */
+  printf(" Trigger Source (0x%x):",proc_csr);
+  trigsrc = proc_trigsrc & FA125_TRIGSRC_TRIGGER_MASK;
+  if(trigsrc == FA125_TRIGSRC_TRIGGER_P0)
+    printf(" P0\n");
+  else if (trigsrc == FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER)
+    printf(" Internal Timer\n");
+  else if (trigsrc == FA125_TRIGSRC_TRIGGER_INTERNAL_SUM)
+    printf(" Internal Sum\n");
+  else if (trigsrc == FA125_TRIGSRC_TRIGGER_P2)
+    printf(" P2\n");
+
+  printf("---------------------------------------------------------------------- \n");
+  return OK;
+
 }
 
 int
@@ -473,6 +602,7 @@ fa125PowerOn (int id)
   return OK;
 }
 
+#ifdef DOESNOTEXIST
 /*******************************************************************************
  *
  * fa125SetTestTrigger - Enable/Disable internal pulser trigger
@@ -509,6 +639,7 @@ fa125SetTestTrigger (int id, int mode)
 
   return OK;
 }
+#endif /* DOESNOTEXIST */
 
 /*******************************************************************************
  *
@@ -748,12 +879,6 @@ fa125PrintTemps(int id)
  *
  * fa125SetClockSource - Set the clock source
  *
- *   This routine should be used in the case that the source clock
- *   is NOT set in faInit (and defaults to Internal).  Such is the case
- *   when clocks are synchronized in a many crate system.  The clock source
- *   of the FADC should ONLY be set AFTER those clocks have been set and
- *   synchronized.
- *
  *   clksrc: defines Clock Source
  *           0  P2 Clock
  *           1  VXS (P0)
@@ -797,6 +922,63 @@ fa125SetClockSource(int id, int clksrc)
 
   FA125LOCK;
   fa125p[id]->main.clock = clksrc;
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/*******************************************************************************
+ *
+ * fa125SetTriggerSource - Set the trigger source
+ *
+ *   trigsrc: defines Trigger Source
+ *           0  P0 (VXS)
+ *           1  Internal Timer
+ *           2  Internal Sum
+ *           3  P2
+ *
+ */
+
+int
+fa125SetTriggerSource(int id, int trigsrc)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if((trigsrc<0) || (trigsrc>3))
+    {
+      printf("%s: ERROR: Invalid Trigger Source specified (%d)\n",
+	     __FUNCTION__,trigsrc);
+      return ERROR;
+    }
+
+  switch(trigsrc)
+    {
+    case 1: /* Internal Timer */
+      trigsrc = FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER;
+      break;
+
+    case 2: /* Internal Sum */
+      trigsrc = FA125_TRIGSRC_TRIGGER_INTERNAL_SUM;
+      break;
+
+    case 3: /* P2 */
+      trigsrc = FA125_TRIGSRC_TRIGGER_P2;
+      break;
+
+    case 0: /* P0 */
+    default:
+      trigsrc = FA125_TRIGSRC_TRIGGER_P0;
+      break;
+    }
+
+  FA125LOCK;
+  fa125p[id]->proc.trigsrc = trigsrc;
   FA125UNLOCK;
 
   return OK;
@@ -966,8 +1148,8 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 	    {
 	      if(dCnt>=nwrds)
 		{
-		  logMsg("%s: WARN: Maximum number of words in readout reached (%d)\n",
-			 __FUNCTION__,nwrds,3,4,5,6);
+		  logMsg("%s (%2d): WARN: Maximum number of words in readout reached (%d)\n",
+			 __FUNCTION__,id,nwrds,3,4,5,6);
 		  fa125Clear(id);
 		  return dCnt;
 		}
@@ -977,8 +1159,8 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 	      FA125UNLOCK;
 	      if(rdata>>31)
 		{
-		  logMsg("%s: ERROR: Invalid Data (0x%08x) at channel %d, read %d\n",
-			 __FUNCTION__,rdata,ichan,iread,5,6);
+		  logMsg("%s (%2d): ERROR: Invalid Data (0x%08x) at channel %d, read %d\n",
+			 __FUNCTION__,id,rdata,ichan,iread,5,6);
 #ifndef VXWORKS
 		  vmeClearException(1);
 #endif
@@ -988,8 +1170,8 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 #ifdef NOZERODATA
 	      if(rdata==0)
 		{
-		  logMsg("%s: ERROR: Empty Data (0x%08x) at channel %d, read %d\n",
-			 __FUNCTION__,rdata,ichan,iread,5,6);
+		  logMsg("%s: ERROR (%2d): Empty Data (0x%08x) at channel %d, read %d\n",
+			 __FUNCTION__,id,rdata,ichan,iread,5,6);
 #ifndef VXWORKS
 		  vmeClearException(1);
 #endif
