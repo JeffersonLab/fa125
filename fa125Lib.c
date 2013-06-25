@@ -1001,7 +1001,7 @@ fa125Poll(int id)
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
     {
-      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id,3,4,5,6);
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -1070,7 +1070,7 @@ fa125Clear(int id)
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
     {
-      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id,3,4,5,6);
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -1112,7 +1112,7 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
     {
-      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id,3,4,5,6);
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -1149,7 +1149,7 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 	      if(dCnt>=nwrds)
 		{
 		  logMsg("%s (%2d): WARN: Maximum number of words in readout reached (%d)\n",
-			 __FUNCTION__,id,nwrds,3,4,5,6);
+			 (int)__FUNCTION__,id,nwrds,4,5,6);
 		  fa125Clear(id);
 		  return dCnt;
 		}
@@ -1160,7 +1160,7 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 	      if(rdata>>31)
 		{
 		  logMsg("%s (%2d): ERROR: Invalid Data (0x%08x) at channel %d, read %d\n",
-			 __FUNCTION__,id,rdata,ichan,iread,5,6);
+			 (int)__FUNCTION__,id,rdata,ichan,iread,6);
 #ifndef VXWORKS
 		  vmeClearException(1);
 #endif
@@ -1171,7 +1171,7 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 	      if(rdata==0)
 		{
 		  logMsg("%s: ERROR (%2d): Empty Data (0x%08x) at channel %d, read %d\n",
-			 __FUNCTION__,id,rdata,ichan,iread,5,6);
+			 (int)__FUNCTION__,id,rdata,ichan,iread,5,6);
 #ifndef VXWORKS
 		  vmeClearException(1);
 #endif
@@ -1190,7 +1190,7 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
       
     default:
       logMsg("%s: ERROR: rflag = %d not supported.\n",
-	     __FUNCTION__,rflag,3,4,5,6);
+	     (int)__FUNCTION__,rflag,3,4,5,6);
       return ERROR;
     }
 
