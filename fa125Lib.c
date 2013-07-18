@@ -1097,7 +1097,7 @@ fa125Clear(int id)
  *            Bits 0-3: Readout type
  *            Bits 4-31: Specific to readout type
  *              0 - programmed I/O from the specified board
- *                  Bits 3-31:
+ *                  Bits 4-31:
  *                  Number of samples to obtain from each channel
  *                  If input number of samples is odd, it will be
  *                  incremented by 1.
