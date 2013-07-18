@@ -112,6 +112,10 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   int maxSlot = 1;
   int minSlot = 21;
 
+  /* Initialize some global variables */
+  nfa125=0;
+  memset((char *)fa125ID,0,sizeof(fa125ID));
+
   /* Check if we're skipping initialization, and just mapping the structure pointer */
   if(iFlag & (1<<16))
     noBoardInit=1;
