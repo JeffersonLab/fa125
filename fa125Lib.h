@@ -114,7 +114,7 @@ struct fa125_a32
 #define FA125_TRIGSRC_TRIGGER_P0             (0<<0)
 #define FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER (1<<0)
 #define FA125_TRIGSRC_TRIGGER_INTERNAL_SUM   (1<<1)
-#define FA125_TRIGSRC_TRIGGER_P2             ((1<<1)|(1<<2))
+#define FA125_TRIGSRC_TRIGGER_P2             ((1<<1)|(1<<0))
 
 /* Define data types and masks */
 #define FA125_DATA_FORMAT0     (0<<13)

@@ -479,7 +479,7 @@ fa125Status(int id)
     printf(" ????\n");
 
   /* TRIGGER */
-  printf(" Trigger Source (0x%x):",proc_csr);
+  printf(" Trigger Source (0x%x):",proc_trigsrc);
   trigsrc = proc_trigsrc & FA125_TRIGSRC_TRIGGER_MASK;
   if(trigsrc == FA125_TRIGSRC_TRIGGER_P0)
     printf(" P0\n");
