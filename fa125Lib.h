@@ -142,6 +142,8 @@ int  fa125SetTestTrigger (int id, int mode);
 int  fa125SetLTC2620(int id, int dacChan, int dacData);
 int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
+unsigned short fa125ReadOffset(int id, int chan);
+int  fa125ReadOffsetToFile(int id, char *filename);
 int  fa125SetPulserAmplitude(int id, int chan, int dacData);
 int  fa125SetMulThreshold(int id, int dacData);
 int  fa125PrintTemps(int id);

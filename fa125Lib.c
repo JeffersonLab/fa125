@@ -67,6 +67,8 @@ int fa125MaxSlot=0;                                   /* Highest Slot hold an FA
 int fa125MinSlot=0;                                   /* Lowest Slot holding an FA125 */
 int fa125TriggerSource=0;
 int berr_count=0; /* A count of the number of BERR that have occurred when running fa125Poll() */
+/* store the dacOffsets in the library, until the firmware is able to read them back */
+static unsigned short fa125dacOffset[FA125_MAX_BOARDS+1][72];
 
 /*******************************************************************************
  *
@@ -115,6 +117,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   /* Initialize some global variables */
   nfa125=0;
   memset((char *)fa125ID,0,sizeof(fa125ID));
+  memset((char *)fa125dacOffset,0,sizeof(fa125dacOffset));
 
   /* Check if we're skipping initialization, and just mapping the structure pointer */
   if(iFlag & (1<<16))
@@ -701,6 +704,7 @@ fa125SetLTC2620 (int id, int dacChan, int dacData)
   return OK;
 }
 
+
 /*******************************************************************************
  *
  * fa125SetOffset - Set the DAC offset for a specific 125MSPS Channel.
@@ -736,6 +740,7 @@ fa125SetOffset (int id, int chan, int dacData)
     }
 
   rval = fa125SetLTC2620(id,DAC_CHAN_OFFSET[chan],dacData);
+  fa125dacOffset[id][chan] = dacData;
 
   return rval;
 }
@@ -788,6 +793,70 @@ fa125SetOffsetFromFile(int id, char *filename)
       return ERROR;
     }
   
+  return OK;
+}
+
+unsigned short
+fa125ReadOffset(int id, int chan)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if((chan<0)||(chan>71))
+    {
+      printf("%s: ERROR: channel (%d) out of range.\n",
+	     __FUNCTION__,chan);
+      return ERROR;
+    }
+
+  return fa125dacOffset[id][chan];
+
+}
+
+int
+fa125ReadOffsetToFile(int id, char *filename)
+{
+  FILE *fd_1;
+  int ichan;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if(filename == NULL)
+    {
+      printf("%s: ERROR: No file specified.\n",__FUNCTION__);
+      return ERROR;
+    }
+
+  fd_1 = fopen(filename,"w");
+  if(fd_1 > 0) 
+    {
+      printf("%s: Writing DAC offsets to file: %s\n",__FUNCTION__,filename);
+      for(ichan=0;ichan<72;ichan++) 
+	{
+	  fprintf(fd_1,"%5d ",fa125dacOffset[id][ichan]);
+	  if(((ichan+1)%12)==0)
+	    fprintf(fd_1,"\n");
+	}
+      fprintf(fd_1,"\n");
+      fclose(fd_1);
+    }
+  else
+    {
+      printf("%s: ERROR opening file: %s\n",__FUNCTION__,filename);
+      return ERROR;
+    }
+
   return OK;
 }
 
