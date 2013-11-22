@@ -28,6 +28,11 @@
 #define __FA125LIB__
 
 #define FA125_MAX_BOARDS             20
+#define FA125_MAX_A32_MEM      0x800000   /* 8 Meg */
+#define FA125_MAX_A32MB_SIZE   0x800000  /*  8 MB */
+
+#define FA125_MAX_ADC_CHANNELS       72
+#define FA125_MAX_DATA_PER_CHANNEL    8
 
 struct fa125_a24_main 
 {
@@ -205,6 +210,15 @@ struct fa125_a32
 #define FA125_DATA_RAW_MASK      0x3FFFF
 #define FA125_DATA_OVERFLOW_MASK 0x8000
 
+#define FA125_DUMMY_DATA          0xf800fafa
+#define FA125_DATA_TYPE_DEFINE       0x80000000
+#define FA125_DATA_TYPE_MASK         0x78000000
+
+#define FA125_DATA_BLOCK_HEADER      0x00000000
+#define FA125_DATA_BLOCK_TRAILER     0x08000000
+#define FA125_DATA_BLKNUM_MASK       0x0000003f
+
+
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id);
 int  fa125Slot(unsigned int i);
@@ -228,5 +242,9 @@ int  fa125Poll(int id);
 unsigned int fa125GetBerrCount();
 int  fa125Clear(int id);
 int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
+int  fa125Bready(int id);
+unsigned int fa125GBready();
+unsigned int fa125ScanMask();
+int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
 
 #endif /* __FA125LIB__ */

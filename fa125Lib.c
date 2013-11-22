@@ -69,6 +69,7 @@ int fa125TriggerSource=0;
 int berr_count=0; /* A count of the number of BERR that have occurred when running fa125Poll() */
 /* store the dacOffsets in the library, until the firmware is able to read them back */
 static unsigned short fa125dacOffset[FA125_MAX_BOARDS+1][72];
+int fa125BlockError=0;       /* Whether (1) or not (0) Block Transfer had an error */
 
 /*******************************************************************************
  *
@@ -103,12 +104,12 @@ static unsigned short fa125dacOffset[FA125_MAX_BOARDS+1][72];
 int
 fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 {
-  int res;
+  int res=0;
   volatile unsigned int rdata=0;
-  unsigned int laddr;//, a32addr;
+  unsigned int laddr=0, a32addr=0;
   volatile struct fa125_a24 *fa125;
   int useList=0, noBoardInit=0;
-  int nfind=0, islot=0, FA_SLOT=0;
+  int nfind=0, islot=0, FA_SLOT=0, ii=0;
   int trigSrc=0, clkSrc=0, srSrc=0;
   unsigned int boardID=0, fw_version=0;
   int maxSlot = 1;
@@ -328,12 +329,39 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       
     }
 
-#ifdef FUTURE_FIRMWARE
-  // FUTURE_FIRMWARE: This stuff will be refined once the fa125s support
-  //  the token passing multiblock addressing
+  for(ii=0;ii<nfa125; ii++) 
+    {
+    
+      /* Program an A32 access address for this FA125's FIFO */
+      a32addr = fa125A32Base + ii*FA125_MAX_A32_MEM;
+#ifdef VXWORKS
+      res = sysBusToLocalAdrs(0x09,(char *)a32addr,(char **)&laddr);
+      if (res != 0) 
+	{
+	  printf("%s: ERROR in sysBusToLocalAdrs(0x09,0x%x,&laddr) \n",
+		 __FUNCTION__,a32addr);
+	  return(ERROR);
+	}
+#else
+      res = vmeBusToLocalAdrs(0x09,(char *)a32addr,(char **)&laddr);
+      if (res != 0) 
+	{
+	  printf("%s: ERROR in vmeBusToLocalAdrs(0x09,0x%x,&laddr) \n",
+		 __FUNCTION__,a32addr);
+	  return(ERROR);
+	}
+#endif
+      fa125pd[fa125ID[ii]] = (volatile struct fa125_a32 *)(laddr);  /* Set a pointer to the FIFO */
+      if(!noBoardInit)
+	{
+	  fa125p[fa125ID[ii]]->main.adr32 = (a32addr>>16) + FA125_ADR32_ENABLE;  /* Write the register and enable */
+	}
+
+    }
+
   /* If there are more than 1 FA125 in the crate then setup the Muliblock Address
      window. This must be the same on each board in the crate */
-  if(nfadc > 1) 
+  if(nfa125 > 1) 
     {
       a32addr = fa125A32Base + (nfa125+1)*FA125_MAX_A32_MEM; /* set MB base above individual board base */
 #ifdef VXWORKS
@@ -357,8 +385,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	  for (ii=0;ii<nfa125;ii++) 
 	    {
 	      /* Write the register and enable FIXME... not defined yet */
-	      vmeWrite32(&(FAp[fadcID[ii]]->adr_mb),
-			(a32addr+FA_MAX_A32MB_SIZE) + (a32addr>>16) + FA_A32_ENABLE);
+	      fa125p[fa125ID[ii]]->main.adr_mb =
+		(a32addr+FA125_MAX_A32MB_SIZE) + (a32addr>>16) + FA125_ADRMB_ENABLE;
 	    }
 	}    
       /* Set First Board and Last Board */
@@ -367,13 +395,10 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       if(!noBoardInit)
 	{
 	  /* FIXME... not defined yet */
-	  vmeWrite32(&(FAp[minSlot]->ctrl1),
-		    vmeRead32(&(FAp[minSlot]->ctrl1)) | FA_FIRST_BOARD);
-	  vmeWrite32(&(FAp[maxSlot]->ctrl1),
-		    vmeRead32(&(FAp[maxSlot]->ctrl1)) | FA_LAST_BOARD);
+	  fa125p[minSlot]->main.ctrl1 = fa125p[minSlot]->main.ctrl1 | FA125_CTRL1_FIRST_BOARD;
+	  fa125p[maxSlot]->main.ctrl1 = fa125p[maxSlot]->main.ctrl1 | FA125_CTRL1_LAST_BOARD;
 	}    
     }
-#endif /* FUTURE_FIRMWARE */
 
   if(nfa125 > 0)
     printf("%s: %d FA125(s) successfully initialized\n",__FUNCTION__,nfa125);
@@ -417,6 +442,9 @@ fa125Status(int id)
   unsigned int proc_trigsrc;
   unsigned int clksrc;
   unsigned int trigsrc;
+  unsigned int a32Base, ambMin, ambMax;
+  unsigned int adr32, adr_mb;
+  unsigned int ctrl1;
 
   if(id==0) id=fa125ID[0];
   
@@ -447,7 +475,16 @@ fa125Status(int id)
   proc_version = fa125p[id]->proc.version;
   proc_csr     = fa125p[id]->proc.csr;
   proc_trigsrc = fa125p[id]->proc.trigsrc;
+
+  adr32        = fa125p[id]->main.adr32;
+  adr_mb       = fa125p[id]->main.adr_mb;
+
+  ctrl1        = fa125p[id]->main.ctrl1;
   FA125UNLOCK;
+
+  a32Base = (adr32 & FA125_ADR32_BASE_MASK)<<16;
+  ambMin  = (adr_mb & FA125_ADRMB_MIN_MASK)<<16;
+  ambMax  = (adr_mb & FA125_ADRMB_MAX_MASK);
 
   #ifdef VXWORKS
   printf("\nSTATUS for FA125 in slot %d at base address 0x%x \n",
@@ -467,6 +504,27 @@ fa125Status(int id)
   printf("      Main SN = 0x%04x%08x\n",main_serial[0], main_serial[1]);
   printf(" Mezzanine SN = 0x%04x%08x\n",mezz_serial[0], mezz_serial[1]);
   
+  if(ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK) 
+    {
+      printf(" Alternate VME Addressing: Multiblock Enabled\n");
+      if(adr32&FA125_ADR32_ENABLE)
+	printf("   A32 Enabled at VME (Local) base 0x%08x (0x%08x)\n",a32Base,
+	       (UINT32) fa125pd[id]);
+      else
+	printf("   A32 Disabled\n");
+    
+      printf("   Multiblock VME Address Range 0x%08x - 0x%08x\n",ambMin,ambMax);
+    }
+  else
+    {
+      printf(" Alternate VME Addressing: Multiblock Disabled\n");
+      if(adr32&FA125_ADR32_ENABLE)
+	printf("   A32 Enabled at VME (Local) base 0x%08x (0x%08x)\n",a32Base,
+	       (UINT32) fa125pd[id]);
+      else
+	printf("   A32 Disabled\n");
+    }
+
   /* POWER */
   if(main_pwrctl)
     printf(" Power is ON\n");
@@ -1268,4 +1326,310 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
     }
 
   return 0;
+}
+
+
+int
+fa125Bready(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125ReadBlock: ERROR : FA125 in slot %d is not initialized \n",id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  FA125LOCK;
+  rval = (fa125p[id]->main.blockCSR & FA125_BLOCKCSR_BLOCK_READY)>>2;
+  FA125LOCK;
+
+  return rval;
+}
+
+unsigned int
+fa125GBready()
+{
+  int ii, id, stat=0;
+  unsigned int dmask=0;
+  
+  FA125LOCK;
+  for(ii=0;ii<nfa125;ii++) 
+    {
+      id = fa125ID[ii];
+      
+      stat = (fa125p[id]->main.blockCSR & FA125_BLOCKCSR_BLOCK_READY)>>2;
+      
+      if(stat)
+	dmask |= (1<<id);
+    }
+  FA125UNLOCK;
+  
+  return(dmask);
+}
+
+unsigned int
+fa125ScanMask()
+{
+  int ifa125, id, dmask=0;
+
+  for(ifa125=0; ifa125<nfa125; ifa125++)
+    {
+      id = fa125ID[ifa125];
+      dmask |= (1<<id);
+    }
+
+  return(dmask);
+}
+
+
+/**************************************************************************************
+ *
+ *  fa125ReadBlock - General Data readout routine
+ *
+ *    id    - Slot number of module to read
+ *    data  - local memory address to place data
+ *    nwrds - Max number of words to transfer
+ *    rflag - Readout Flag
+ *              0 - programmed I/O from the specified board
+ *              1 - DMA transfer using Universe/Tempe DMA Engine 
+ *                    (DMA VME transfer Mode must be setup prior)
+ *              2 - Multiblock DMA transfer (Multiblock must be enabled
+ *                     and daisychain in place or SD being used)
+ */
+int
+fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
+{
+  int ii, blknum;
+  int stat, retVal, xferCount, rmode, async;
+  int dCnt, berr=0;
+  int dummy=0;
+  volatile unsigned int *laddr;
+  unsigned int bhead, ehead, val;
+  unsigned int vmeAdr, csr;
+
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125ReadBlock: ERROR : FA125 in slot %d is not initialized \n",id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if(data==NULL) 
+    {
+      logMsg("fa125ReadBlock: ERROR: Invalid Destination address\n",0,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  fa125BlockError=0;
+  if(nwrds <= 0) nwrds= (FA125_MAX_ADC_CHANNELS*FA125_MAX_DATA_PER_CHANNEL) + 8;
+  rmode = rflag&0x0f;
+  async = rflag&0x80;
+  
+  if(rmode >= 1) 
+    { /* Block Transfers */
+    
+      /*Assume that the DMA programming is already setup. */
+      /* Don't Bother checking if there is valid data - that should be done prior
+	 to calling the read routine */
+
+      /* Check for 8 byte boundary for address - insert dummy word (Slot 0 FA125 Dummy DATA)*/
+      if((unsigned long) (data)&0x7) 
+	{
+#ifdef VXWORKS
+	  *data = FA215_DUMMY_DATA;
+#else
+	  *data = LSWAP(FA125_DUMMY_DATA);
+#endif
+	  dummy = 1;
+	  laddr = (data + 1);
+	} 
+      else 
+	{
+	  dummy = 0;
+	  laddr = data;
+	}
+
+      FA125LOCK;
+      if(rmode == 2) 
+	{ /* Multiblock Mode */
+	  if(((fa125p[id]->main.ctrl1)&FA125_CTRL1_FIRST_BOARD)==0) 
+	    {
+	      logMsg("fa125ReadBlock: ERROR: FA125 in slot %d is not First Board\n",id,0,0,0,0,0);
+	      FA125UNLOCK;
+	      return(ERROR);
+	    }
+	  vmeAdr = (unsigned int)(FA125pmb) - fa125A32Offset;
+	}
+      else
+	{
+	  vmeAdr = (unsigned int)(fa125pd[id]) - fa125A32Offset;
+	}
+#ifdef VXWORKS
+      retVal = sysVmeDmaSend((UINT32)laddr, vmeAdr, (nwrds<<2), 0);
+#else
+      retVal = vmeDmaSend((UINT32)laddr, vmeAdr, (nwrds<<2));
+#endif
+      if(retVal |= 0) 
+	{
+	  logMsg("fa125ReadBlock: ERROR in DMA transfer Initialization 0x%x\n",retVal,0,0,0,0,0);
+	  FA125UNLOCK;
+	  return(retVal);
+	}
+
+      if(async) 
+	{ /* Asynchonous mode - return immediately - don't wait for done!! */
+	  FA125UNLOCK;
+	  return(OK);
+	}
+      else
+	{
+	  /* Wait until Done or Error */
+#ifdef VXWORKS
+	  retVal = sysVmeDmaDone(10000,1);
+#else
+	  retVal = vmeDmaDone();
+#endif
+	}
+
+      if(retVal > 0) 
+	{
+	  /* Check to see that Bus error was generated by FA125 */
+	  if(rmode == 2) 
+	    {
+	      csr = fa125p[fa125MaxSlot]->main.blockCSR;  /* from Last FA125 */
+	      stat = (csr)&FA125_BLOCKCSR_BERR_ASSERTED;  /* from Last FA125 */
+	    }
+	  else
+	    {
+	      csr = fa125p[id]->main.blockCSR;  /* from Last FA125 */
+	      stat = (csr)&FA125_BLOCKCSR_BERR_ASSERTED;  /* from Last FA125 */
+	    }
+	  if((retVal>0) && (stat)) 
+	    {
+#ifdef VXWORKS
+	      xferCount = (nwrds - (retVal>>2) + dummy);  /* Number of Longwords transfered */
+#else
+	      xferCount = ((retVal>>2) + dummy);  /* Number of Longwords transfered */
+#endif
+	      FA125UNLOCK;
+	      return(xferCount); /* Return number of data words transfered */
+	    }
+	  else
+	    {
+#ifdef VXWORKS
+	      xferCount = (nwrds - (retVal>>2) + dummy);  /* Number of Longwords transfered */
+#else
+	      xferCount = ((retVal>>2) + dummy);  /* Number of Longwords transfered */
+#endif
+	      logMsg("fa125ReadBlock: DMA transfer terminated by unknown BUS Error (csr=0x%x xferCount=%d id=%d)\n",
+		     csr,xferCount,id,0,0,0);
+	      FA125UNLOCK;
+	      fa125BlockError=1;
+	      return(xferCount);
+	    }
+	} 
+      else if (retVal == 0)
+	{ /* Block Error finished without Bus Error */
+#ifdef VXWORKS
+	  logMsg("fa125ReadBlock: WARN: DMA transfer terminated by word count 0x%x\n",nwrds,0,0,0,0,0);
+#else
+	  logMsg("fa125ReadBlock: WARN: DMA transfer returned zero word count 0x%x\n",nwrds,0,0,0,0,0);
+#endif
+	  FA125UNLOCK;
+	  fa125BlockError=1;
+	  return(nwrds);
+	} 
+      else 
+	{  /* Error in DMA */
+#ifdef VXWORKS
+	  logMsg("fa125ReadBlock: ERROR: sysVmeDmaDone returned an Error\n",0,0,0,0,0,0);
+#else
+	  logMsg("fa125ReadBlock: ERROR: vmeDmaDone returned an Error\n",0,0,0,0,0,0);
+#endif
+	  FA125UNLOCK;
+	  fa125BlockError=1;
+	  return(retVal>>2);
+	}
+
+    } 
+  else 
+    {  /*Programmed IO */
+
+      /* Check if Bus Errors are enabled. If so then disable for Prog I/O reading */
+      FA125LOCK;
+      berr = fa125p[id]->main.ctrl1&FA125_CTRL1_ENABLE_BERR;
+      if(berr)
+	fa125p[id]->main.ctrl1 = fa125p[id]->main.ctrl1 & ~FA125_CTRL1_ENABLE_BERR;
+
+      dCnt = 0;
+      /* Read Block Header - should be first word */
+      bhead = fa125pd[id]->data; 
+#ifndef VXWORKS
+      bhead = LSWAP(bhead);
+#endif
+      if((bhead&FA125_DATA_TYPE_DEFINE)&&((bhead&FA125_DATA_TYPE_MASK) == FA125_DATA_BLOCK_HEADER)) {
+	blknum = bhead&FA125_DATA_BLKNUM_MASK;
+	ehead = fa125pd[id]->data;
+#ifndef VXWORKS
+	ehead = LSWAP(ehead);
+#endif
+#ifdef VXWORKS
+	data[dCnt] = bhead;
+#else
+	data[dCnt] = LSWAP(bhead); /* Swap back to little-endian */
+#endif
+	dCnt++;
+#ifdef VXWORKS
+	data[dCnt] = ehead;
+#else
+	data[dCnt] = LSWAP(ehead); /* Swap back to little-endian */
+#endif
+	dCnt++;
+      }
+      else
+	{
+	  /* We got bad data - Check if there is any data at all */
+	  if( ((fa125p[id]->proc.ev_count) & FA125_PROC_EVCOUNT_MASK) == 0) 
+	    {
+	      logMsg("fa125ReadBlock: FIFO Empty (0x%08x)\n",bhead,0,0,0,0,0);
+	      FA125UNLOCK;
+	      return(0);
+	    } 
+	  else 
+	    {
+	      logMsg("fa125ReadBlock: ERROR: Invalid Header Word 0x%08x\n",bhead,0,0,0,0,0);
+	      FA125UNLOCK;
+	      return(ERROR);
+	    }
+	}
+
+      ii=0;
+      while(ii<nwrds) 
+	{
+	  val = fa125pd[id]->data;
+	  data[ii+2] = val;
+#ifndef VXWORKS
+	  val = LSWAP(val);
+#endif
+	  if( (val&FA125_DATA_TYPE_DEFINE) 
+	      && ((val&FA125_DATA_TYPE_MASK) == FA125_DATA_BLOCK_TRAILER) )
+	    break;
+	  ii++;
+	}
+      ii++;
+      dCnt += ii;
+
+
+      if(berr)
+	fa125p[id]->main.ctrl1 = fa125p[id]->main.ctrl1 | FA125_CTRL1_ENABLE_BERR;
+
+      FA125UNLOCK;
+      return(dCnt);
+    }
+
+  FA125UNLOCK;
+  return(OK);
 }
