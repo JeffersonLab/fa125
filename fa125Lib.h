@@ -36,50 +36,50 @@
 
 struct fa125_a24_main 
 {
-  /* 0x0000 */ volatile const UINT32 id;
-  /* 0x0004 */ volatile       UINT32 swapctl;
-  /* 0x0008 */ volatile const UINT32 version;
-  /* 0x000C */ volatile       UINT32 clock;
-  /* 0x0010 */ volatile       UINT32 pwrctl;
-  /* 0x0014 */ volatile       UINT32 dacctl;
-  /* 0x0018 */                UINT32 blank0[(0x20-0x18)/4];
-  /* 0x0020 */ volatile const UINT32 serial[4];
-  /* 0x0030 */ volatile const UINT32 temperature[2];
-  /* 0x0038 */ volatile const UINT32 slot_ga;
-  /* 0x003C */ volatile const UINT32 a32_ba;
-  /* 0x0040 */ volatile       UINT32 blockCSR;
-  /* 0x0044 */ volatile       UINT32 ctrl1;
-  /* 0x0048 */ volatile       UINT32 adr32;
-  /* 0x004C */ volatile       UINT32 adr_mb;
-  /* 0x0050 */ volatile       UINT32 busy_level;
-  /* 0x0054 */ volatile       UINT32 block_count;
-  /* 0x0058 */                UINT32 blank1[(0x1000-0x58)/4];
+  /* 0x0000 */ volatile UINT32 id;
+  /* 0x0004 */ volatile UINT32 swapctl;
+  /* 0x0008 */ volatile UINT32 version;
+  /* 0x000C */ volatile UINT32 clock;
+  /* 0x0010 */ volatile UINT32 pwrctl;
+  /* 0x0014 */ volatile UINT32 dacctl;
+  /* 0x0018 */          UINT32 blank0[(0x20-0x18)/4];
+  /* 0x0020 */ volatile UINT32 serial[4];
+  /* 0x0030 */ volatile UINT32 temperature[2];
+  /* 0x0038 */ volatile UINT32 slot_ga;
+  /* 0x003C */ volatile UINT32 a32_ba;
+  /* 0x0040 */ volatile UINT32 blockCSR;
+  /* 0x0044 */ volatile UINT32 ctrl1;
+  /* 0x0048 */ volatile UINT32 adr32;
+  /* 0x004C */ volatile UINT32 adr_mb;
+  /* 0x0050 */ volatile UINT32 busy_level;
+  /* 0x0054 */ volatile UINT32 block_count;
+  /* 0x0058 */          UINT32 blank1[(0x1000-0x58)/4];
 };
 
 struct fa125_a24_fe 
 {
-  /* 0xN000 */ volatile const UINT32 version;
-  /* 0xN004 */ volatile       UINT32 test;
-  /* 0xN008 */                UINT32 blank0[(0x20-0x08)/4];
-  /* 0xN020 */ volatile const UINT32 adc_async[6];
-  /* 0xN038 */                UINT32 blank1[(0x40-0x38)/4];
-  /* 0xN040 */ volatile const UINT32 acqfifo[6];
-  /* 0xN058 */                UINT32 blank2[(0x1000-0x58)/4];
+  /* 0xN000 */ volatile UINT32 version;
+  /* 0xN004 */ volatile UINT32 test;
+  /* 0xN008 */          UINT32 blank0[(0x20-0x08)/4];
+  /* 0xN020 */ volatile UINT32 adc_async[6];
+  /* 0xN038 */          UINT32 blank1[(0x40-0x38)/4];
+  /* 0xN040 */ volatile UINT32 acqfifo[6];
+  /* 0xN058 */          UINT32 blank2[(0x1000-0x58)/4];
 };
 
 struct fa125_a24_proc 
 {
-  /* 0xD000 */ volatile const UINT32 version;
-  /* 0xD004 */ volatile       UINT32 csr;
-  /* 0xD008 */ volatile       UINT32 trigsrc;
-  /* 0xD00C */ volatile       UINT32 ctrl2;
-  /* 0xD010 */                UINT32 blank0;
-  /* 0xD014 */ volatile       UINT32 blocklevel;
-  /* 0xD018 */ volatile       UINT32 trig_count;
-  /* 0xD01C */ volatile       UINT32 ev_count;
-  /* 0xD020 */ volatile       UINT32 clock125_count;
-  /* 0xD024 */ volatile       UINT32 sync_count;
-  /* 0xD028 */ volatile       UINT32 trig2_count;
+  /* 0xD000 */ volatile UINT32 version;
+  /* 0xD004 */ volatile UINT32 csr;
+  /* 0xD008 */ volatile UINT32 trigsrc;
+  /* 0xD00C */ volatile UINT32 ctrl2;
+  /* 0xD010 */ volatile UINT32 softtrig;
+  /* 0xD014 */ volatile UINT32 blocklevel;
+  /* 0xD018 */ volatile UINT32 trig_count;
+  /* 0xD01C */ volatile UINT32 ev_count;
+  /* 0xD020 */ volatile UINT32 clock125_count;
+  /* 0xD024 */ volatile UINT32 sync_count;
+  /* 0xD028 */ volatile UINT32 trig2_count;
 };
 
 struct fa125_a24 
@@ -92,7 +92,7 @@ struct fa125_a24
 
 struct fa125_a32 
 {
-  /* 0x0000 */ volatile const UINT32 data;
+  /* 0x0000 */ volatile UINT32 data;
 };
 
 #define FA125_ID                   0xADC12500
@@ -241,10 +241,16 @@ int  fa125SetTriggerSource(int id, int trigsrc);
 int  fa125Poll(int id);
 unsigned int fa125GetBerrCount();
 int  fa125Clear(int id);
+int  fa125Enable(int id);
+int  fa125Reset(int id, int reset);
+int  fa125ResetToken(int id);
+int  fa125SetBlocklevel(int id, int blocklevel);
+int  fa125SoftTrigger(int id);
 int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
 int  fa125Bready(int id);
 unsigned int fa125GBready();
 unsigned int fa125ScanMask();
 int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
+void fa125DecodeData(unsigned int data);
 
 #endif /* __FA125LIB__ */

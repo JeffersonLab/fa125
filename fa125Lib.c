@@ -59,7 +59,7 @@ volatile struct fa125_a24 *fa125p[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 me
 volatile struct fa125_a32 *fa125pd[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 FIFO memory */
 volatile unsigned int *FA125pmb;                        /* pointer to Multblock window */
 int fa125ID[FA125_MAX_BOARDS]; /* array of slot numbers for FA125s */
-int fa125A32Base   = 0x08000000;                      /* Minimum VME A32 Address for use by FA125s */
+int fa125A32Base   = 0x09000000;                      /* Minimum VME A32 Address for use by FA125s */
 int fa125A32Offset = 0x08000000;                      /* Difference in CPU A32 Base - VME A32 Base */
 int fa125A24Offset=0;                            /* Difference in CPU A24 Base and VME A24 Base */
 unsigned int fa125AddrList[FA125_MAX_BOARDS];            /* array of a24 addresses for FA125s */
@@ -189,6 +189,31 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
   fa125A24Offset = laddr - fa125AddrList[0];
 
+  /* Calculate the A32 Offset for use in Block Transfers */
+#ifdef VXWORKS
+  res = sysBusToLocalAdrs(0x09,(char *)fa125A32Base,(char **)&laddr);
+  if (res != 0) 
+    {
+      printf("faInit: ERROR in sysBusToLocalAdrs(0x09,0x%x,&laddr) \n",fadcA32Base);
+      return(ERROR);
+    } 
+  else 
+    {
+      fa125A32Offset = laddr - fa125A32Base;
+    }
+#else
+  res = vmeBusToLocalAdrs(0x09,(char *)fa125A32Base,(char **)&laddr);
+  if (res != 0) 
+    {
+      printf("faInit: ERROR in vmeBusToLocalAdrs(0x09,0x%x,&laddr) \n",fa125A32Base);
+      return(ERROR);
+    } 
+  else 
+    {
+      fa125A32Offset = laddr - fa125A32Base;
+    }
+#endif
+
   for(islot=0; islot<nfind; islot++)
     {
       
@@ -217,43 +242,48 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	    }
 	  else
 	    {
+#ifdef BYTESWAPPING
 	      /* Turn on hardware byteswapping, if needed */
 #ifdef VXWORKS
 	      fa125->main.swapctl = 0;
 #else
 	      fa125->main.swapctl = 0xffffffff;
 #endif
+#else
+	      vmeWrite32(&fa125->main.swapctl, 0);
+#endif// BYTESWAPPING
+
 
 	      /* Check the Firmware Versions */
 	      /* MAIN */
-	      fw_version = fa125->main.version;
+	      fw_version = vmeRead32(&fa125->main.version);
 	      if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
 		{
 		  printf("%s: ERROR: For module at 0x%x, Unsupported MAIN firmware version 0x%x\n",
 			 __FUNCTION__,fa125AddrList[islot],fw_version);
-		  continue;
+/* 		  continue; */
 		}
 
 	      /* PROC */
-	      fw_version = fa125->proc.version;
+	      fw_version = vmeRead32(&fa125->proc.version);
 	      if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
 		{
 		  printf("%s: ERROR: For module at 0x%x, Unsupported PROC firmware version 0x%x\n",
 			 __FUNCTION__,fa125AddrList[islot],fw_version);
-		  continue;
+/* 		  continue; */
 		}
 
 	      /* FE - just check the first one */
-	      fw_version = fa125->fe[0].version;
+	      fw_version = vmeRead32(&fa125->fe[0].version);
 	      if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
 		{
 		  printf("%s: ERROR: For module at 0x%x, Unsupported FE firmware version 0x%x\n",
 			 __FUNCTION__,fa125AddrList[islot],fw_version);
-		  continue;
+/* 		  continue; */
 		}
 
 	      /* Get the Geographic Address */
-	      boardID = fa125->main.slot_ga;
+	      boardID = vmeRead32(&fa125->main.slot_ga);
 
 	      if((boardID<2) || (boardID>21))
 		{
@@ -311,6 +341,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   for(islot=0; islot<nfa125; islot++)
     {
       FA_SLOT = fa125ID[islot];
+#ifdef BYTESWAPPING
 #ifdef VXWORKS
       /* Turn off hardware byte swapping for vxWorks */
       fa125SetByteSwap(FA_SLOT,0);
@@ -318,7 +349,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       /* Turn on hardware byte swapping for Linux */
       fa125SetByteSwap(FA_SLOT,1);
 #endif
-
+#endif // BYTESWAPPING
       fa125Clear(FA_SLOT);
 
       /* Set the clock source */
@@ -354,7 +385,9 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       fa125pd[fa125ID[ii]] = (volatile struct fa125_a32 *)(laddr);  /* Set a pointer to the FIFO */
       if(!noBoardInit)
 	{
-	  fa125p[fa125ID[ii]]->main.adr32 = (a32addr>>16) + FA125_ADR32_ENABLE;  /* Write the register and enable */
+	  vmeWrite32(&fa125p[fa125ID[ii]]->main.adr32, (a32addr>>16) | FA125_ADR32_ENABLE);  /* Write the register and enable */
+	  vmeWrite32(&fa125p[fa125ID[ii]]->main.ctrl1, 
+			     vmeRead32(&fa125p[fa125ID[ii]]->main.ctrl1) | FA125_CTRL1_ENABLE_BERR);/* Enable Bus Error termination */
 	}
 
     }
@@ -382,11 +415,16 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       FA125pmb = (unsigned int *)(laddr);  /* Set a pointer to the FIFO */
       if(!noBoardInit)
 	{
+	  unsigned int ctrl1=0;
 	  for (ii=0;ii<nfa125;ii++) 
 	    {
-	      /* Write the register and enable FIXME... not defined yet */
-	      fa125p[fa125ID[ii]]->main.adr_mb =
-		(a32addr+FA125_MAX_A32MB_SIZE) + (a32addr>>16) + FA125_ADRMB_ENABLE;
+	      /* Write to the register and enable */
+	      vmeWrite32(&fa125p[fa125ID[ii]]->main.adr_mb,
+			 (a32addr+FA125_MAX_A32MB_SIZE) | (a32addr>>16) | FA125_ADRMB_ENABLE);
+	      ctrl1 = vmeRead32(&fa125p[fa125ID[ii]]->main.ctrl1) & 
+		~(FA125_CTRL1_FIRST_BOARD | FA125_CTRL1_LAST_BOARD);
+	      vmeWrite32(&fa125p[fa125ID[ii]]->main.ctrl1,
+			 ctrl1 | FA125_CTRL1_ENABLE_MULTIBLOCK);
 	    }
 	}    
       /* Set First Board and Last Board */
@@ -394,9 +432,10 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       fa125MinSlot = minSlot;
       if(!noBoardInit)
 	{
-	  /* FIXME... not defined yet */
-	  fa125p[minSlot]->main.ctrl1 = fa125p[minSlot]->main.ctrl1 | FA125_CTRL1_FIRST_BOARD;
-	  fa125p[maxSlot]->main.ctrl1 = fa125p[maxSlot]->main.ctrl1 | FA125_CTRL1_LAST_BOARD;
+	  vmeWrite32(&fa125p[minSlot]->main.ctrl1, 
+		     vmeRead32(&fa125p[minSlot]->main.ctrl1) | FA125_CTRL1_FIRST_BOARD);
+	  vmeWrite32(&fa125p[maxSlot]->main.ctrl1,
+		     vmeRead32(&fa125p[maxSlot]->main.ctrl1) | FA125_CTRL1_LAST_BOARD);
 	}    
     }
 
@@ -442,9 +481,13 @@ fa125Status(int id)
   unsigned int proc_trigsrc;
   unsigned int clksrc;
   unsigned int trigsrc;
-  unsigned int a32Base, ambMin, ambMax;
+  unsigned int faBase, a32Base, ambMin, ambMax;
   unsigned int adr32, adr_mb;
   unsigned int ctrl1;
+  unsigned int block_count;
+  unsigned int trig_count, ev_count;
+  unsigned int blockCSR;
+  unsigned int test[12];
 
   if(id==0) id=fa125ID[0];
   
@@ -455,33 +498,45 @@ fa125Status(int id)
     }
 
   FA125LOCK;
-  main_id = fa125p[id]->main.id;
-  main_swapctl = fa125p[id]->main.swapctl;
-  main_version = fa125p[id]->main.version;
+  main_id = vmeRead32(&fa125p[id]->main.id);
+  main_swapctl = vmeRead32(&fa125p[id]->main.swapctl);
+  main_version = vmeRead32(&fa125p[id]->main.version);
 #ifdef DOESNOTEXIST
-  main_csr = fa125p[id]->main.csr;
+  main_csr = vmeRead32(&fa125p[id]->main.csr);
 #endif
-  main_pwrctl = fa125p[id]->main.pwrctl;
-  main_slot_ga = fa125p[id]->main.slot_ga;
-  main_clock = fa125p[id]->main.clock;
+  main_pwrctl = vmeRead32(&fa125p[id]->main.pwrctl);
+  main_slot_ga = vmeRead32(&fa125p[id]->main.slot_ga);
+  main_clock = vmeRead32(&fa125p[id]->main.clock);
 
-  main_serial[0] = fa125p[id]->main.serial[0];
-  main_serial[1] = fa125p[id]->main.serial[1];
-  mezz_serial[0] = fa125p[id]->main.serial[2];
-  mezz_serial[1] = fa125p[id]->main.serial[3];
+  main_serial[0] = vmeRead32(&fa125p[id]->main.serial[0]);
+  main_serial[1] = vmeRead32(&fa125p[id]->main.serial[1]);
+  mezz_serial[0] = vmeRead32(&fa125p[id]->main.serial[2]);
+  mezz_serial[1] = vmeRead32(&fa125p[id]->main.serial[3]);
 
-  fe_version = fa125p[id]->fe[0].version;
+  fe_version = vmeRead32(&fa125p[id]->fe[0].version);
 
-  proc_version = fa125p[id]->proc.version;
-  proc_csr     = fa125p[id]->proc.csr;
-  proc_trigsrc = fa125p[id]->proc.trigsrc;
+  proc_version = vmeRead32(&fa125p[id]->proc.version);
+  proc_csr     = vmeRead32(&fa125p[id]->proc.csr);
+  proc_trigsrc = vmeRead32(&fa125p[id]->proc.trigsrc);
 
-  adr32        = fa125p[id]->main.adr32;
-  adr_mb       = fa125p[id]->main.adr_mb;
+  adr32        = vmeRead32(&fa125p[id]->main.adr32);
+  adr_mb       = vmeRead32(&fa125p[id]->main.adr_mb);
 
-  ctrl1        = fa125p[id]->main.ctrl1;
+  ctrl1        = vmeRead32(&fa125p[id]->main.ctrl1);
+
+  block_count  = vmeRead32(&fa125p[id]->main.block_count);
+
+  trig_count   = vmeRead32(&fa125p[id]->proc.trig_count);
+  ev_count     = vmeRead32(&fa125p[id]->proc.ev_count);
+
+  blockCSR     = vmeRead32(&fa125p[id]->main.blockCSR);
+
+  int ife=0;
+  for(ife=0; ife<12; ife++)
+    test[ife]  = vmeRead32(&fa125p[id]->fe[ife].test);
   FA125UNLOCK;
 
+  faBase  = (unsigned int) &fa125p[id]->main.id;
   a32Base = (adr32 & FA125_ADR32_BASE_MASK)<<16;
   ambMin  = (adr_mb & FA125_ADRMB_MIN_MASK)<<16;
   ambMax  = (adr_mb & FA125_ADRMB_MAX_MASK);
@@ -503,6 +558,51 @@ fa125Status(int id)
 
   printf("      Main SN = 0x%04x%08x\n",main_serial[0], main_serial[1]);
   printf(" Mezzanine SN = 0x%04x%08x\n",mezz_serial[0], mezz_serial[1]);
+
+  printf("\n");
+  printf("Registers:\n");
+  printf("  blockCSR       (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->main.blockCSR) - faBase, blockCSR);
+  printf("  ctrl1          (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->main.ctrl1) - faBase, ctrl1);
+  printf("  adr32          (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->main.adr32) - faBase, adr32);
+  printf("  adr_mb         (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->main.adr_mb) - faBase, adr_mb);
+  printf("  trigsrc        (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->proc.trigsrc) - faBase, proc_trigsrc);
+
+  printf("  clock          (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->main.clock) - faBase, main_clock);
+
+  printf("\n");
+
+  printf("  test 0         (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->fe[0].test) - faBase, test[0]);
+  printf("  test 1         (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->fe[1].test) - faBase, test[1]);
+  printf("  test 2         (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->fe[2].test) - faBase, test[2]);
+  printf("  test 3         (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->fe[3].test) - faBase, test[3]);
+  printf("  test 4         (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->fe[4].test) - faBase, test[4]);
+  printf("  test 5         (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->fe[5].test) - faBase, test[5]);
+  printf("  test 6         (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->fe[6].test) - faBase, test[6]);
+  printf("  test 7         (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->fe[7].test) - faBase, test[7]);
+  printf("  test 8         (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->fe[8].test) - faBase, test[8]);
+  printf("  test 9         (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->fe[9].test) - faBase, test[9]);
+  printf("  test 10        (0x%04x) = 0x%08x\t", 
+	 (unsigned int)(&fa125p[id]->fe[10].test) - faBase, test[10]);
+  printf("  test 11        (0x%04x) = 0x%08x\n", 
+	 (unsigned int)(&fa125p[id]->fe[11].test) - faBase, test[11]);
+
+  printf("\n");
   
   if(ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK) 
     {
@@ -524,6 +624,7 @@ fa125Status(int id)
       else
 	printf("   A32 Disabled\n");
     }
+  printf("\n");
 
   /* POWER */
   if(main_pwrctl)
@@ -555,6 +656,30 @@ fa125Status(int id)
   else if (trigsrc == FA125_TRIGSRC_TRIGGER_P2)
     printf(" P2\n");
 
+  printf("\n");
+  if(ctrl1&FA125_CTRL1_ENABLE_BERR)
+    printf("   Bus Error ENABLED\n");
+  else
+    printf("   Bus Error DISABLED\n");
+
+  if(ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK)
+    {
+      if(ctrl1&FA125_CTRL1_FIRST_BOARD)
+	printf("   MultiBlock transfer ENABLED (First Board)\n");
+      else if(ctrl1&FA125_CTRL1_LAST_BOARD)
+	printf("   MultiBlock transfer ENABLED (Last Board)\n");
+      else
+	printf("   MultiBlock transfer ENABLED\n");
+    }
+  else
+    printf("   MultiBlock transfer DISABLED\n");
+
+  printf("\n");
+
+  printf(" Block Count = %d\n",block_count);
+  printf(" Trig  Count = %d\n",trig_count);
+  printf(" Ev    Count = %d\n",ev_count);
+
   printf("---------------------------------------------------------------------- \n");
   return OK;
 
@@ -573,9 +698,9 @@ fa125SetByteSwap(int id, int enable)
 
   FA125LOCK;
   if(enable)
-    fa125p[id]->main.swapctl = 0xffffffff;
+    vmeWrite32(&fa125p[id]->main.swapctl, 0xffffffff);
   else
-    fa125p[id]->main.swapctl = 0;
+    vmeWrite32(&fa125p[id]->main.swapctl, 0);
   FA125UNLOCK;
 
   return OK;
@@ -604,18 +729,18 @@ fa125PowerOff (int id)
   printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
 	 ((unsigned int) &fa125p[id]->main.pwrctl) -
 	 ((unsigned int)&fa125p[id]->main.id),
-	 fa125p[id]->main.pwrctl);
+	 vmeRead32(&fa125p[id]->main.pwrctl));
 #endif
 
   FA125LOCK;
-  fa125p[id]->main.pwrctl = 0;
+  vmeWrite32(&fa125p[id]->main.pwrctl, 0);
   FA125UNLOCK;
 
 #ifdef DEBUG
   printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
 	 ((unsigned int) &fa125p[id]->main.pwrctl) -
 	 ((unsigned int)&fa125p[id]->main.id),
-	 fa125p[id]->main.pwrctl);
+	 vmeRead32(&fa125p[id]->main.pwrctl));
 #endif
 
   return OK;
@@ -644,18 +769,18 @@ fa125PowerOn (int id)
   printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
 	 ((unsigned int) &fa125p[id]->main.pwrctl) -
 	 ((unsigned int)&fa125p[id]->main.id),
-	 fa125p[id]->main.pwrctl);
+	 vmeRead32(&fa125p[id]->main.pwrctl));
 #endif
 
   FA125LOCK;
-  fa125p[id]->main.pwrctl = FA125_PWRCTL_KEY_ON;
+  vmeWrite32(&fa125p[id]->main.pwrctl, FA125_PWRCTL_KEY_ON);
   FA125UNLOCK;
 
 #ifdef DEBUG
   printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
 	 ((unsigned int) &fa125p[id]->main.pwrctl) -
 	 ((unsigned int)&fa125p[id]->main.id),
-	 fa125p[id]->main.pwrctl);
+	 vmeRead32(&fa125p[id]->main.pwrctl));
 #endif
 
 #ifdef VXWORKS
@@ -694,11 +819,13 @@ fa125SetTestTrigger (int id, int mode)
   FA125LOCK;
   if(mode==0) /* turn test trigger off */
     {
-      fa125p[id]->main.csr &= ~FA125_MAIN_CSR_TEST_TRIGGER;
+      vmeWrite32(&fa125p[id]->main.csr,
+		 vmeRead32(&fa125p[id]->main.csr) & ~FA125_MAIN_CSR_TEST_TRIGGER);
     }
   else if(mode==1) /* turn test trigger on */
     {
-      fa125p[id]->main.csr |= FA125_MAIN_CSR_TEST_TRIGGER;
+      vmeWrite32(&fa125p[id]->main.csr,
+		 vmeRead32(&fa125p[id]->main.csr) | FA125_MAIN_CSR_TEST_TRIGGER);
     }
   FA125UNLOCK;
 
@@ -752,11 +879,11 @@ fa125SetLTC2620 (int id, int dacChan, int dacData)
     for(j=31;j>=0;j--) 
       {
 	x = bmask | ( ((sdat[k]>>j)&1)!=0 ? dmask : 0 );
-	fa125p[id]->main.dacctl = x;
-	fa125p[id]->main.dacctl = x | FA125_DACCTL_DACSCLK_MASK;
+	vmeWrite32(&fa125p[id]->main.dacctl, x);
+	vmeWrite32(&fa125p[id]->main.dacctl, x | FA125_DACCTL_DACSCLK_MASK);
       }
 
-  fa125p[id]->main.dacctl = 0;  // this deasserts CS, setting the DAC
+  vmeWrite32(&fa125p[id]->main.dacctl, 0);  // this deasserts CS, setting the DAC
   FA125UNLOCK;
 
   return OK;
@@ -994,8 +1121,8 @@ fa125PrintTemps(int id)
     }
 
   FA125LOCK;
-  temp1 = 0.0625*((int) fa125p[id]->main.temperature[0]);
-  temp2 = 0.0625*((int) fa125p[id]->main.temperature[1]);
+  temp1 = 0.0625*((int) vmeRead32(&fa125p[id]->main.temperature[0]));
+  temp2 = 0.0625*((int) vmeRead32(&fa125p[id]->main.temperature[1]));
   FA125UNLOCK;
   
   printf("%s: Main board temperature: %5.2lf \tMezzanine board temperature: %5.2lf\n",
@@ -1052,7 +1179,7 @@ fa125SetClockSource(int id, int clksrc)
     }
 
   FA125LOCK;
-  fa125p[id]->main.clock = clksrc;
+  vmeWrite32(&fa125p[id]->main.clock, clksrc);
   FA125UNLOCK;
 
   return OK;
@@ -1109,7 +1236,7 @@ fa125SetTriggerSource(int id, int trigsrc)
     }
 
   FA125LOCK;
-  fa125p[id]->proc.trigsrc = trigsrc;
+  vmeWrite32(&fa125p[id]->proc.trigsrc, trigsrc);
   FA125UNLOCK;
 
   return OK;
@@ -1141,7 +1268,9 @@ fa125Poll(int id)
   res = vxMemProbe((char *) &(fa125p[id]->proc.csr),VX_READ,4,(char *)&rval);
 #else
   res = vmeMemProbe((char *) &(fa125p[id]->proc.csr),4,(char *)&rval);
+#ifdef DOBYTESWAP
   rval = LSWAP(rval);
+#endif //DOBYTESWAP
 #endif
   FA125UNLOCK;
 
@@ -1206,8 +1335,121 @@ fa125Clear(int id)
     }
 
   FA125LOCK;
-  fa125p[id]->proc.csr=FA125_PROC_CSR_CLEAR;
-  fa125p[id]->proc.csr=0;
+  vmeWrite32(&fa125p[id]->proc.csr, FA125_PROC_CSR_CLEAR);
+  vmeWrite32(&fa125p[id]->proc.csr, 0);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125Enable(int id)
+{
+  int ife=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  for(ife=0; ife<12; ife++)
+    {
+      vmeWrite32(&fa125p[id]->fe[ife].test, (1<<1));
+    }
+  FA125UNLOCK;
+
+  printf("%s(%2d): ENABLED\n",__FUNCTION__,id);
+
+  return OK;
+}
+
+int
+fa125Reset(int id, int reset)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  switch(reset)
+    {
+    case 0:
+      vmeWrite32(&fa125p[id]->main.blockCSR, FA125_BLOCKCSR_PULSE_SOFT_RESET);
+      vmeWrite32(&fa125p[id]->main.blockCSR, FA125_BLOCKCSR_PULSE_SOFT_RESET);
+      vmeWrite32(&fa125p[id]->main.blockCSR, FA125_BLOCKCSR_PULSE_SOFT_RESET);
+      break;
+
+    case 1:
+      vmeWrite32(&fa125p[id]->main.blockCSR, FA125_BLOCKCSR_PULSE_HARD_RESET);
+      break;
+
+    default:
+      vmeWrite32(&fa125p[id]->main.blockCSR, FA125_BLOCKCSR_PULSE_SOFT_RESET);
+    }
+  vmeWrite32(&fa125p[id]->main.blockCSR, 0);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125ResetToken(int id)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->main.blockCSR, FA125_BLOCKCSR_TAKE_TOKEN);
+  vmeWrite32(&fa125p[id]->main.blockCSR, 0);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125SetBlocklevel(int id, int blocklevel)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.blocklevel, blocklevel);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125SoftTrigger(int id)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.softtrig, 1);
+  vmeWrite32(&fa125p[id]->proc.softtrig, 0);
   FA125UNLOCK;
 
   return OK;
@@ -1286,7 +1528,7 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 		}
 
 	      FA125LOCK;
-	      rdata=fa125p[id]->fe[ichan/6].acqfifo[ichan%6];
+	      rdata=vmeRead32(&fa125p[id]->fe[ichan/6].acqfifo[ichan%6]);
 	      FA125UNLOCK;
 	      if(rdata>>31)
 		{
@@ -1337,13 +1579,13 @@ fa125Bready(int id)
 
   if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
     {
-      logMsg("fa125ReadBlock: ERROR : FA125 in slot %d is not initialized \n",id,0,0,0,0,0);
+      logMsg("fa125Bready: ERROR : FA125 in slot %d is not initialized \n",id,0,0,0,0,0);
       return(ERROR);
     }
 
   FA125LOCK;
-  rval = (fa125p[id]->main.blockCSR & FA125_BLOCKCSR_BLOCK_READY)>>2;
-  FA125LOCK;
+  rval = (vmeRead32(&fa125p[id]->main.blockCSR) & FA125_BLOCKCSR_BLOCK_READY)>>2;
+  FA125UNLOCK;
 
   return rval;
 }
@@ -1359,8 +1601,9 @@ fa125GBready()
     {
       id = fa125ID[ii];
       
-      stat = (fa125p[id]->main.blockCSR & FA125_BLOCKCSR_BLOCK_READY)>>2;
-      
+      stat = (vmeRead32(&fa125p[id]->main.blockCSR) & FA125_BLOCKCSR_BLOCK_READY)>>2;
+/*       printf("%s(%2d): main.blockCSR = 0x%08x\n", */
+/* 	     __FUNCTION__,id, fa125p[id]->main.blockCSR); */
       if(stat)
 	dmask |= (1<<id);
     }
@@ -1455,7 +1698,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
       FA125LOCK;
       if(rmode == 2) 
 	{ /* Multiblock Mode */
-	  if(((fa125p[id]->main.ctrl1)&FA125_CTRL1_FIRST_BOARD)==0) 
+	  if((vmeRead32(&fa125p[id]->main.ctrl1)&FA125_CTRL1_FIRST_BOARD)==0) 
 	    {
 	      logMsg("fa125ReadBlock: ERROR: FA125 in slot %d is not First Board\n",id,0,0,0,0,0);
 	      FA125UNLOCK;
@@ -1499,12 +1742,12 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	  /* Check to see that Bus error was generated by FA125 */
 	  if(rmode == 2) 
 	    {
-	      csr = fa125p[fa125MaxSlot]->main.blockCSR;  /* from Last FA125 */
+	      csr = vmeRead32(&fa125p[fa125MaxSlot]->main.blockCSR);  /* from Last FA125 */
 	      stat = (csr)&FA125_BLOCKCSR_BERR_ASSERTED;  /* from Last FA125 */
 	    }
 	  else
 	    {
-	      csr = fa125p[id]->main.blockCSR;  /* from Last FA125 */
+	      csr = vmeRead32(&fa125p[id]->main.blockCSR);  /* from Last FA125 */
 	      stat = (csr)&FA125_BLOCKCSR_BERR_ASSERTED;  /* from Last FA125 */
 	    }
 	  if((retVal>0) && (stat)) 
@@ -1560,11 +1803,13 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 
       /* Check if Bus Errors are enabled. If so then disable for Prog I/O reading */
       FA125LOCK;
-      berr = fa125p[id]->main.ctrl1&FA125_CTRL1_ENABLE_BERR;
+      berr = vmeRead32(&fa125p[id]->main.ctrl1)&FA125_CTRL1_ENABLE_BERR;
       if(berr)
-	fa125p[id]->main.ctrl1 = fa125p[id]->main.ctrl1 & ~FA125_CTRL1_ENABLE_BERR;
+	vmeWrite32(&fa125p[id]->main.ctrl1, 
+		   vmeRead32(&fa125p[id]->main.ctrl1) & ~FA125_CTRL1_ENABLE_BERR);
 
       dCnt = 0;
+      // FIXME: Double check that endian-ness is correct here.
       /* Read Block Header - should be first word */
       bhead = fa125pd[id]->data; 
 #ifndef VXWORKS
@@ -1592,7 +1837,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
       else
 	{
 	  /* We got bad data - Check if there is any data at all */
-	  if( ((fa125p[id]->proc.ev_count) & FA125_PROC_EVCOUNT_MASK) == 0) 
+	  if( (vmeRead32(&fa125p[id]->proc.ev_count) & FA125_PROC_EVCOUNT_MASK) == 0) 
 	    {
 	      logMsg("fa125ReadBlock: FIFO Empty (0x%08x)\n",bhead,0,0,0,0,0);
 	      FA125UNLOCK;
@@ -1624,7 +1869,8 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 
 
       if(berr)
-	fa125p[id]->main.ctrl1 = fa125p[id]->main.ctrl1 | FA125_CTRL1_ENABLE_BERR;
+	vmeWrite32(&fa125p[id]->main.ctrl1, 
+		   vmeRead32(&fa125p[id]->main.ctrl1) | FA125_CTRL1_ENABLE_BERR);
 
       FA125UNLOCK;
       return(dCnt);
@@ -1632,4 +1878,324 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 
   FA125UNLOCK;
   return(OK);
+}
+
+struct data_struct {
+  unsigned int new_type;
+  unsigned int type;
+  unsigned int slot_id_hd;
+  unsigned int mod_id_hd;
+  unsigned int slot_id_tr;
+  unsigned int n_evts;
+  unsigned int blk_num;
+  unsigned int n_words;
+  unsigned int evt_num_1;
+  unsigned int time_now;
+  unsigned int time_1;
+  unsigned int time_2;
+  unsigned int chan;
+  unsigned int width;
+  unsigned int valid_1;
+  unsigned int adc_1;
+  unsigned int valid_2;
+  unsigned int adc_2;
+  unsigned int over;
+  unsigned int adc_sum;
+  unsigned int pulse_num;
+  unsigned int thres_bin;
+  unsigned int quality;
+  unsigned int integral;
+  unsigned int time;
+  unsigned int chan_a;
+  unsigned int source_a;
+  unsigned int chan_b;
+  unsigned int source_b;
+  unsigned int group;
+  unsigned int time_coarse;  
+  unsigned int time_fine;
+  unsigned int vmin;
+  unsigned int vpeak;
+  unsigned int scaler[18];/* data stream scalers */
+};
+
+volatile struct data_struct fadc_data;
+
+void 
+fa125DecodeData(unsigned int data)
+{
+  /* for new data format - 10/23/13 - EJ */
+
+  static unsigned int type_last = 15;/* initialize to type FILLER WORD */
+  static unsigned int time_last = 0;
+  static unsigned int scaler_index = 0;
+  static unsigned int num_scalers = 1;
+  
+  static unsigned int slot_id_ev_hd = 0;
+  static unsigned int slot_id_dnv = 0;
+  static unsigned int slot_id_fill = 0;
+
+  int i_print =1;
+  
+  if( scaler_index )/* scaler data word */
+    {
+      fadc_data.type = 16;/* scaler data words as type 16 */
+      fadc_data.new_type = 0;
+      if( scaler_index < num_scalers )
+	{ 
+	  fadc_data.scaler[scaler_index - 1] = data;
+	  if( i_print ) 
+	    printf("%8X - SCALER(%d) = %d\n", data, (scaler_index - 1), data);
+	  scaler_index++;
+	}
+      else/* last scaler word */
+	{ 
+	  fadc_data.scaler[scaler_index - 1] = data;
+	  if( i_print ) 
+	    printf("%8X - SCALER(%d) = %d\n", data, (scaler_index - 1), data);
+	  scaler_index = 0;
+	  num_scalers = 1;
+	} 
+    }
+  else/* non-scaler word */
+    {
+      if( data & 0x80000000 )/* data type defining word */
+	{
+	  fadc_data.new_type = 1;
+	  fadc_data.type = (data & 0x78000000) >> 27;
+	}
+      else/* data type continuation word */
+	{
+	  fadc_data.new_type = 0;
+	  fadc_data.type = type_last;
+	}
+        
+      switch( fadc_data.type )
+	{
+	case 0:/* BLOCK HEADER */
+	  fadc_data.slot_id_hd = (data & 0x7C00000) >> 22;
+	  fadc_data.mod_id_hd =  (data &  0x3C0000) >> 18;
+	  fadc_data.n_evts =  (data & 0x000FF);
+	  fadc_data.blk_num = (data & 0x3FF00) >> 8;
+	  if( i_print ) 
+	    printf("%8X - BLOCK HEADER - slot = %d  id = %d  n_evts = %d  n_blk = %d\n",
+		   data, fadc_data.slot_id_hd, fadc_data.mod_id_hd, fadc_data.n_evts, fadc_data.blk_num);
+	  break;
+
+	case 1:/* BLOCK TRAILER */
+	  fadc_data.slot_id_tr = (data & 0x7C00000) >> 22;
+	  fadc_data.n_words = (data & 0x3FFFFF);
+	  if( i_print ) 
+	    printf("%8X - BLOCK TRAILER - slot = %d   n_words = %d\n",
+		   data, fadc_data.slot_id_tr, fadc_data.n_words);
+	  break;
+
+	case 2:/* EVENT HEADER */
+	  if( fadc_data.new_type )
+	    {
+	      slot_id_ev_hd        = (data & 0x7C00000) >> 22;
+	      fadc_data.evt_num_1 =  (data & 0x03FFFFF);
+	      if( i_print ) 
+		printf("%8X - EVENT HEADER - slot = %d  evt_num = %d\n", 
+		       data, slot_id_ev_hd, fadc_data.evt_num_1);
+	    }    
+	  break;
+
+	case 3:/* TRIGGER TIME */
+	  if( fadc_data.new_type )
+	    {
+	      fadc_data.time_1 = (data & 0xFFFFFF);
+	      if( i_print ) 
+		printf("%8X - TRIGGER TIME 1 - time = 0x%08x\n", data, fadc_data.time_1);
+	      fadc_data.time_now = 1;
+	      time_last = 1;
+	    }    
+	  else
+	    {
+	      if( time_last == 1 )
+		{
+		  fadc_data.time_2 = (data & 0xFFFFFF);
+		  if( i_print ) 
+		    printf("%8X - TRIGGER TIME 2 - time = 0x%08x\n", data, fadc_data.time_2);
+		  fadc_data.time_now = 2;
+		}    
+	      else
+		if( i_print ) 
+		  printf("%8X - TRIGGER TIME - (ERROR)\n", data);
+	                      
+	      time_last = fadc_data.time_now;
+	    }    
+	  break;
+
+	case 4:/* WINDOW RAW DATA */
+	  if( fadc_data.new_type )
+	    {
+	      fadc_data.chan = (data & 0x7F00000) >> 20;
+	      fadc_data.width = (data & 0xFFF);
+	      if( i_print ) 
+		printf("%8X - WINDOW RAW DATA - chan = %d   width = %d\n", 
+		       data, fadc_data.chan, fadc_data.width);
+	    }    
+	  else
+	    {
+	      fadc_data.valid_1 = 1;
+	      fadc_data.valid_2 = 1;
+	      fadc_data.adc_1 = (data & 0x1FFF0000) >> 16;
+	      if( data & 0x20000000 )
+		fadc_data.valid_1 = 0;
+	      fadc_data.adc_2 = (data & 0x1FFF);
+	      if( data & 0x2000 )
+		fadc_data.valid_2 = 0;
+	      if( i_print ) 
+		printf("%8X - RAW SAMPLES - valid = %d  adc = %d (%X)  valid = %d  adc = %d (%X)\n", 
+		       data, fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
+		       fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
+	    }    
+	  break;
+
+	case 5:/* WINDOW SUM */
+	  fadc_data.over = 0; 
+	  fadc_data.chan = (data & 0x7800000) >> 23;
+	  fadc_data.adc_sum = (data & 0x3FFFFF);
+	  if( data & 0x400000 )
+	    fadc_data.over = 1;
+	  if( i_print ) 
+	    printf("%8X - WINDOW SUM - chan = %d   over = %d   adc_sum = 0x%08x\n",
+		   data, fadc_data.chan, fadc_data.over, fadc_data.adc_sum);
+	  break;
+
+	case 6:/* PULSE RAW DATA */
+	  if( fadc_data.new_type )
+	    {
+	      fadc_data.chan = (data & 0x7800000) >> 23;
+	      fadc_data.pulse_num = (data & 0x600000) >> 21;
+	      fadc_data.thres_bin = (data & 0x3FF);
+	      if( i_print ) 
+		printf("%8X - PULSE RAW DATA - chan = %d   pulse # = %d   threshold bin = %d\n", 
+		       data, fadc_data.chan, fadc_data.pulse_num, fadc_data.thres_bin);
+	    }    
+	  else
+	    {
+	      fadc_data.valid_1 = 1;
+	      fadc_data.valid_2 = 1;
+	      fadc_data.adc_1 = (data & 0x1FFF0000) >> 16;
+	      if( data & 0x20000000 )
+		fadc_data.valid_1 = 0;
+	      fadc_data.adc_2 = (data & 0x1FFF);
+	      if( data & 0x2000 )
+		fadc_data.valid_2 = 0;
+	      if( i_print ) 
+		printf("%8X - PULSE RAW SAMPLES - valid = %d  adc = %d   valid = %d  adc = %d\n", 
+		       data, fadc_data.valid_1, fadc_data.adc_1, 
+		       fadc_data.valid_2, fadc_data.adc_2);
+	    }    
+	  break;
+
+	case 7:/* PULSE INTEGRAL */
+	  fadc_data.chan = (data & 0x7800000) >> 23;
+	  fadc_data.pulse_num = (data & 0x600000) >> 21;
+	  fadc_data.quality = (data & 0x180000) >> 19;
+	  fadc_data.integral = (data & 0x7FFFF);
+	  if( i_print ) 
+	    printf("%8X - PULSE INTEGRAL - chan = %d   pulse # = %d   quality = %d   integral = %d\n", 
+		   data, fadc_data.chan, fadc_data.pulse_num, 
+		   fadc_data.quality, fadc_data.integral);
+	  break;
+
+	  /* !!! */       case 8:/* PULSE TIME */
+			    fadc_data.chan = (data & 0x7800000) >> 23;
+			    fadc_data.pulse_num = (data & 0x600000) >> 21;
+			    fadc_data.quality = (data & 0x180000) >> 19;
+			    fadc_data.time = (data & 0xFFFF);
+			    fadc_data.time_coarse = (data & 0xFFC0) >> 6;
+			    fadc_data.time_fine = (data & 0x3F);
+			    if( i_print ) 
+			      printf("%8X - PULSE TIME - chan = %d  pulse # = %d  qual = %d  t = %d (c = %d  f = %d)\n", 
+				     data, fadc_data.chan, fadc_data.pulse_num, fadc_data.quality, 
+				     fadc_data.time, fadc_data.time_coarse, fadc_data.time_fine);
+			    break;
+
+	case 9:/* STREAMING RAW DATA */
+	  if( fadc_data.new_type )
+	    {
+	      fadc_data.chan_a = (data & 0x3C00000) >> 22;
+	      fadc_data.source_a = (data & 0x4000000) >> 26;
+	      fadc_data.chan_b = (data & 0x1E0000) >> 17;
+	      fadc_data.source_b = (data & 0x200000) >> 21;
+	      if( i_print ) 
+		printf("%8X - STREAMING RAW DATA - ena A = %d  chan A = %d   ena B = %d  chan B = %d\n", 
+		       data, fadc_data.source_a, fadc_data.chan_a, 
+		       fadc_data.source_b, fadc_data.chan_b);
+	    }    
+	  else
+	    {
+	      fadc_data.valid_1 = 1;
+	      fadc_data.valid_2 = 1;
+	      fadc_data.adc_1 = (data & 0x1FFF0000) >> 16;
+	      if( data & 0x20000000 )
+		fadc_data.valid_1 = 0;
+	      fadc_data.adc_2 = (data & 0x1FFF);
+	      if( data & 0x2000 )
+		fadc_data.valid_2 = 0;
+	      fadc_data.group = (data & 0x40000000) >> 30;
+	      if( fadc_data.group )
+		{
+		  if( i_print ) 
+		    printf("%8X - RAW SAMPLES B - valid = %d  adc = %d   valid = %d  adc = %d\n", 
+			   data, fadc_data.valid_1, fadc_data.adc_1, 
+			   fadc_data.valid_2, fadc_data.adc_2);
+		} 
+	      else
+		if( i_print ) 
+		  printf("%8X - RAW SAMPLES A - valid = %d  adc = %d   valid = %d  adc = %d\n", 
+			 data, fadc_data.valid_1, fadc_data.adc_1, 
+			 fadc_data.valid_2, fadc_data.adc_2);            
+	    }    
+	  break;
+
+	  /* !!! */       case 10:/* PULSE PARAMETERS */
+			    fadc_data.chan = (data & 0x7800000) >> 23;
+			    fadc_data.pulse_num = (data & 0x600000) >> 21;
+			    fadc_data.vmin = (data & 0x1FF000) >> 12;
+			    fadc_data.vpeak = (data & 0xFFF);
+			    if( i_print ) 
+			      printf("%8X - PULSE V - chan = %d   pulse # = %d   vmin = %d   vpeak = %d\n", 
+				     data, fadc_data.chan, fadc_data.pulse_num, 
+				     fadc_data.vmin, fadc_data.vpeak);
+			    break;
+
+	case 11:/* UNDEFINED TYPE */
+	  if( i_print ) 
+	    printf("%8X - UNDEFINED TYPE = %d\n", data, fadc_data.type);
+	  break;
+	              
+	case 12:/* SCALER HEADER */
+	  num_scalers = data & 0x3F;/* number of scaler words to follow */
+	  scaler_index = 1;/* identify next word as a scaler value */
+	  if( i_print ) 
+	    printf("%8X - SCALER HEADER = %d  (NUM SCALERS = %d)\n", 
+		   data, fadc_data.type, num_scalers);
+	  break;
+	              
+	case 13:/* END OF EVENT */
+	  if( i_print ) 
+	    printf("%8X - END OF EVENT = %d\n", data, fadc_data.type);
+	  break;
+
+	case 14:/* DATA NOT VALID (no data available) */
+	  slot_id_dnv = (data & 0x7C00000) >> 22; 
+	  if( i_print )
+	    printf("%8X - DATA NOT VALID = %d  slot = %d\n", data, fadc_data.type, slot_id_dnv);
+	  break;
+
+	case 15:/* FILLER WORD */
+	  slot_id_fill = (data & 0x7C00000) >> 22; 
+	  if( i_print ) 
+	    printf("%8X - FILLER WORD = %d  slot = %d\n", data, fadc_data.type, slot_id_fill);
+	  break;
+	}
+      
+      type_last = fadc_data.type;    /* save type of current data word */
+      
+    }
+
 }

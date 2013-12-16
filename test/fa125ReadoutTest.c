@@ -47,12 +47,12 @@ main(int argc, char *argv[])
    *  dataType = 0 (D16)    1 (D32)    2 (BLK32) 3 (MBLK) 4 (2eVME) 5 (2eSST)
    *  sstMode  = 0 (SST160) 1 (SST267) 2 (SST320)
    */
-  vmeDmaConfig(2,5,1);
+  vmeDmaConfig(2,2,1);
 
   /* INIT dmaPList */
 
   dmaPFreeAll();
-  vmeIN  = dmaPCreate("vmeIN",1024*10,5,0);
+  vmeIN  = dmaPCreate("vmeIN",1024*100,5,0);
   vmeOUT = dmaPCreate("vmeOUT",0,0,0);
     
   dmaPStatsAll();
@@ -114,25 +114,21 @@ main(int argc, char *argv[])
   taskDelay(1);
   tiEnableVXSSignals();
   taskDelay(1);
-  tiSyncReset();
+  tiSyncReset(1);
 
   taskDelay(1);
     
   tiStatus();
 
-  sdInit();
-  sdSetActiveVmeSlots( (1<<14) | (1<<16) | (1<<18) );
-  sdStatus();
-
   extern unsigned int fa125AddrList[FA125_MAX_BOARDS];
 
-  fa125AddrList[0] = (14<<19);
-  fa125AddrList[1] = (16<<19);
-  fa125AddrList[2] = (18<<19);
-  int nmods=3;
+  fa125AddrList[0] = (5<<19);
+  fa125AddrList[1] = (6<<19);
+  fa125AddrList[2] = (7<<19);
+  int nmods=18;
 
   int iFlag=0;
-  iFlag  = (1<<17); /* use fa125AddrList */
+/*   iFlag  = (1<<17); /\* use fa125AddrList *\/ */
   /*
     bits 2-1:  defines Trigger source
     (0) 0 0  VXS (P0)
@@ -148,16 +144,25 @@ main(int argc, char *argv[])
   iFlag |= (0<<1);  /* Trigger Source */
   iFlag |= (1<<4);  /* Clock Source */
 
-  stat = fa125Init(0,0,nmods,iFlag);
+  stat = fa125Init(3<<19,1<<19,nmods,iFlag);
   if (stat != OK) 
     {
       printf("ERROR: fa125Init failed \n");
       goto CLOSE;
     } 
-  
+
+
+  sdInit();
+  sdSetActiveVmeSlots( fa125ScanMask());
+  sdStatus();
+
+  getchar();
+
+  fa125SetByteSwap(0,0);
   int iadc=0, faslot=0;
   extern int nfa125;
 
+  fa125ResetToken(0);
   for(iadc=0; iadc<nfa125; iadc++)
     {
       faslot = fa125Slot(iadc);
@@ -166,14 +171,26 @@ main(int argc, char *argv[])
       int ichan=0;
       for(ichan=0; ichan<72; ichan++)
 	{
-	  fa125SetOffset(faslot,ichan,0x8000);
+	  fa125SetOffset(faslot,ichan,0x4000);
 	}
-  
+      int i=0;
+      for(i=0; i<3 ; i++)
+	{
+	  /*adc125SetPulserAmplitude(0,i,key_value);*/
+	  fa125SetPulserAmplitude(0,i,0x8000);
+	}
+      
       fa125PrintTemps(faslot);
-      fa125Clear(faslot);
+/*       fa125Clear(faslot); */
 
+      fa125SetBlocklevel(faslot, 1);
+
+      fa125Reset(faslot, 0);
+      fa125Enable(faslot);
       fa125Status(faslot);
     }
+
+  fa125ResetToken(0);
 
   printf("Hit any key to enable Triggers...\n");
   getchar();
@@ -301,8 +318,9 @@ myISR(int arg)
 #endif
 
   *dma_dabufp++;
+  extern int nfa125;
 
-  dCnt = tiReadBlock(dma_dabufp,900>>2,1);
+  dCnt = tiReadBlock(dma_dabufp,(490*nfa125)+200,1);
   if(dCnt<=0)
     {
       printf("No data or error.  dCnt = %d\n",dCnt);
@@ -310,25 +328,35 @@ myISR(int arg)
   else
     {
       dma_dabufp += dCnt;
-      /*       printf("dCnt = %d\n",dCnt); */
+      printf("FROM TI: dCnt = %d\n",dCnt);
     
     }
 #else /* DO_READOUT */
   tiResetBlockReadout();
 #endif /* DO_READOUT */
-    
+
   int iread=0, iadc=0, faslot=0;;
-  extern int nfa125;
   timeout=100000;
 
+#ifdef OLDREADOUT
   for(iadc=0; iadc<nfa125; iadc++)
+#else
+    iadc=0;
+#endif
     {
       faslot = fa125Slot(iadc);
+/*       fa125SoftTrigger(faslot); */
+      sleep(1);
+    
 #ifdef OLDREADOUT
+      iread=0;
       do {iread++;} while((!fa125Poll(faslot)) && iread<timeout);
       {
 	if(iread==timeout) 
-	  printf("fa125 (%d) timeout\n",faslot);
+	  {
+	    printf("fa125 (%d) timeout\n",faslot);
+	    fa125Status(faslot);
+	  }
 	else
 	  {
 	    dCnt = fa125ReadEvent(faslot,(volatile UINT32 *)dma_dabufp,72*3,(2)<<3);
@@ -346,34 +374,56 @@ myISR(int arg)
 #else // OLDREADOUT
       int rflag=1;
       if(nfa125>1) rflag=2;
+      printf("Check for BReady\n");
       for(iread=0; iread<timeout; iread++)
 	{
-	  if(fa125GBready() == fa125ScanMask())
+	  if(fa125GBready(faslot)==fa125ScanMask())
 	    break;
 	}
+      printf("Check for Timeout\n");
       if(iread==timeout)
-	printf("fa125 (%d) timeout\n",faslot);
+	{
+	  printf("fa125 (%d) timeout  (fa125GBready: 0x%08x != 0x%08x)\n",faslot,
+		 fa125GBready(faslot), fa125ScanMask());
+/* 	  fa125SGtatus(); */
+	}
       else
 	{
-	  dCnt = fa125ReadBlock(faslot,(volatile UINT32 *)dma_dabufp,72*3,rflag);
-	  if(dCnt<=0)
-	    {
-	      printf("No fa125 (%d) data or error.  dCnt = %d\n",faslot,dCnt);
-	    }
-	  else
-	    {
-		dma_dabufp += dCnt;
-	    }
+	  printf("Readout\n");
+/* 	  for(iadc=0; iadc<nfa125; iadc++) */
+/* 	    { */
+/* 	      rflag=1; */
+	      faslot = fa125Slot(iadc);
+	      dCnt = fa125ReadBlock(faslot,(volatile UINT32 *)dma_dabufp,0x3000,rflag);
+	      if(dCnt<=0)
+		{
+		  printf("No fa125 (%d) data or error.  dCnt = %d\n",faslot,dCnt);
+		}
+	      else
+		{
+		  dma_dabufp += dCnt;
+		}
+/* 	    } */
 	}
+  for(iadc=0; iadc<nfa125; iadc++)
+    {
+      fa125Status(fa125Slot(iadc));
+    }
+  fa125ResetToken(fa125Slot(0));
 #endif // OLDREADOUT
+
     }
 
+  for(iadc=0; iadc<nfa125; iadc++)
+    {
+      fa125Status(fa125Slot(iadc));
+    }
   PUTEVENT(vmeOUT);
   
   outEvent = dmaPGetItem(vmeOUT);
 #define READOUT
 #ifdef READOUT
-  if(tiIntCount%1000==0)
+  if(tiIntCount%1==0)
     {
       printf("Received %d triggers...\n",
 	     tiIntCount);
@@ -382,11 +432,18 @@ myISR(int arg)
       
       for(idata=0;idata<len;idata++)
 	{
+#ifdef OLDPRINTOUT
 	  if((idata%5)==0) printf("\n\t");
 	  printf("  0x%08x ",(unsigned int)LSWAP(outEvent->data[idata]));
+#else
+	  fa125DecodeData(LSWAP(outEvent->data[idata]));
+#endif // OLDPRINTOUT
 	}
       printf("\n\n");
+      printf(" event length = %d\n",len);
     }
+  printf("<Enter> to continue\n");
+/*   getchar(); */
 #endif
   dmaPFreeItem(outEvent);
 
