@@ -20,8 +20,6 @@
  *     Driver library header for readout of the 125MSPS ADC using vxWorks 5.5 
  *     (or later) or Intel based single board computer
  *
- * SVN: $Rev$
- *
  *----------------------------------------------------------------------------*/
 
 #ifndef __FA125LIB__
@@ -233,6 +231,16 @@ struct fa125_a32
 #define FA125_DATA_BLOCK_TRAILER     0x08000000
 #define FA125_DATA_BLKNUM_MASK       0x0000003f
 
+/* Define Firmware updating OPCODEs */
+#define FA125_OPCODE_BUFFER_WRITE   0
+#define FA125_OPCODE_MAIN_READ      1
+#define FA125_OPCODE_BUFFER_READ    2
+#define FA125_OPCODE_BUFFER_PUSH    3
+#define FA125_OPCODE_ERASE          4
+
+/* Define other firmware updating macros */
+#define FA125_FIRMWARE_MAX_PAGES 8*1024
+#define FA125_FIRMWARE_MAX_BYTE_PER_PAGE 528
 
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id);
@@ -267,5 +275,13 @@ unsigned int fa125GBready();
 unsigned int fa125ScanMask();
 int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
 void fa125DecodeData(unsigned int data);
+
+/*  Firmware Updating Routine Prototypes */
+int  fa125FirmwareBlockErase(int id);
+int  fa125FirmwareWriteToBuffer(int id, int ipage);
+int  fa125FirmwarePushBufferToMain(int id, int ipage);
+int  fa125FirmwareReadMainPage(int id, int ipage);
+int  fa125FirmwareReadBuffer(int id);
+int  fadcFirmwareReadMcsFile(char *filename);
 
 #endif /* __FA125LIB__ */
