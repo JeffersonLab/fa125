@@ -277,11 +277,15 @@ int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
 void fa125DecodeData(unsigned int data);
 
 /*  Firmware Updating Routine Prototypes */
+void fa125FirmwareSetDebug(int debug);
 int  fa125FirmwareBlockErase(int id);
 int  fa125FirmwareWriteToBuffer(int id, int ipage);
 int  fa125FirmwarePushBufferToMain(int id, int ipage);
 int  fa125FirmwareReadMainPage(int id, int ipage);
 int  fa125FirmwareReadBuffer(int id);
-int  fadcFirmwareReadMcsFile(char *filename);
+int  fa125FirmwareVerifyPage(int ipage);
+int  fa125FirmwareReadMcsFile(char *filename);
+int  fa125FirmwareWriteFull(int id);
+int  fa125FirmwareVerifyFull(int id);
 
 #endif /* __FA125LIB__ */
