@@ -46,7 +46,7 @@ main(int argc, char *argv[]) {
 	fadc_address = (unsigned int) strtoll(argv[2],NULL,16)&0xffffffff;
       }
 
-    fa125FirmwareSetDebug(1);
+    fa125FirmwareSetDebug(0);
 
     if(fa125FirmwareReadMcsFile(mcs_filename) != OK)
       {
@@ -61,7 +61,7 @@ main(int argc, char *argv[]) {
       }
 
     int iFlag = (1<<18); /* Do not perform firmware check */
-    iFlag |= 2<<4;       /* Internal Clock */
+    iFlag |= (2<<4);     /* Internal Clock */
     stat = fa125Init(fadc_address,0x0,1,iFlag);
     if(stat<0)
       {
@@ -85,9 +85,11 @@ main(int argc, char *argv[]) {
 	goto CLOSE;
       }
 
-    fa125FirmwareVerifyFull(0);
-/*     fa125FirmwareWriteFull(0); */
-
+/*     fa125FirmwareVerifyFull(0); */
+    fa125FirmwareEraseFull(0);
+    fa125FirmwareSetDebug(1);
+    fa125FirmwareWriteFull(0);
+    
     goto CLOSE;
 
  CLOSE:

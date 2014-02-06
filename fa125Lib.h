@@ -278,10 +278,11 @@ void fa125DecodeData(unsigned int data);
 
 /*  Firmware Updating Routine Prototypes */
 void fa125FirmwareSetDebug(int debug);
-int  fa125FirmwareBlockErase(int id);
+int  fa125FirmwareBlockErase(int id, int iblock, int stayon);
 int  fa125FirmwareWriteToBuffer(int id, int ipage);
 int  fa125FirmwarePushBufferToMain(int id, int ipage);
-int  fa125FirmwareReadMainPage(int id, int ipage);
+int  fa125FirmwareReadMainPage(int id, int ipage, int stayon);
+unsigned int fa125FirmwareReadMain(int id, int ipage, int ibadr);
 int  fa125FirmwareReadBuffer(int id);
 int  fa125FirmwareVerifyPage(int ipage);
 int  fa125FirmwareReadMcsFile(char *filename);
