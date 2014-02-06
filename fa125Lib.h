@@ -242,6 +242,17 @@ struct fa125_a32
 #define FA125_FIRMWARE_MAX_PAGES 8*1024
 #define FA125_FIRMWARE_MAX_BYTE_PER_PAGE 528
 
+/* Define Firmware DEBUG types */
+typedef enum
+  {
+    FA125_FIRMWARE_DEBUG_WRITE_BUFFER      = (1<<0),
+    FA125_FIRMWARE_DEBUG_MCS_FILE          = (1<<1),
+    FA125_FIRMWARE_DEBUG_WAIT_FOR_READY    = (1<<2),
+    FA125_FIRMWARE_DEBUG_MCS_SKIPPED_LINES = (1<<3),
+    FA125_FIRMWARE_DEBUG_VERIFY_ERASE      = (1<<4),
+    FA125_FIRMWARE_DEBUG_MEASURE_TIMES     = (1<<5)
+  } FA125_FIRMWARE_DEBUG_FLAGS;
+
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id);
 int  fa125Slot(unsigned int i);
@@ -277,16 +288,18 @@ int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
 void fa125DecodeData(unsigned int data);
 
 /*  Firmware Updating Routine Prototypes */
-void fa125FirmwareSetDebug(int debug);
-int  fa125FirmwareBlockErase(int id, int iblock, int stayon);
+void fa125FirmwareSetDebug(unsigned int debug);
+int  fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone);
 int  fa125FirmwareWriteToBuffer(int id, int ipage);
-int  fa125FirmwarePushBufferToMain(int id, int ipage);
+int  fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone);
+int  fa125FirmwareWaitForPushBufferToMain(int id, int ipage);
 int  fa125FirmwareReadMainPage(int id, int ipage, int stayon);
-unsigned int fa125FirmwareReadMain(int id, int ipage, int ibadr);
 int  fa125FirmwareReadBuffer(int id);
 int  fa125FirmwareVerifyPage(int ipage);
+int  fa125FirmwareVerifyErasedPage(int ipage);
 int  fa125FirmwareReadMcsFile(char *filename);
+int  fa125FirmwareEraseFull(int id);
 int  fa125FirmwareWriteFull(int id);
 int  fa125FirmwareVerifyFull(int id);
-
+void fa125FirmwarePrintTimes();
 #endif /* __FA125LIB__ */
