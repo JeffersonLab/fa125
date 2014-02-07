@@ -2286,6 +2286,19 @@ struct fpga_fw_info sfpga[NFPGATYPE] =
     {"PROC", 0x1659FA, 0x1E1B90, 0, 0}
   };
 
+/* Static Firmware Updating routine prototypes */
+static int fa125FirmwareWaitForReady(int id, int nwait, int *rwait);
+static int fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone);
+static int fa125FirmwareWriteToBuffer(int id, int ipage);
+static int fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone);
+static int fa125FirmwareWaitForPushBufferToMain(int id, int ipage);
+static int fa125FirmwareReadMainPage(int id, int ipage, int stayon);
+static int fa125FirmwareReadBuffer(int id);
+static int fa125FirmwareVerifyFull(int id);
+static int fa125FirmwareVerifyPage(int ipage);
+static int fa125FirmwareVerifyErasedPage(int ipage);
+static int hex2num(char c);
+
 void
 fa125FirmwareSetDebug(unsigned int debug)
 {
@@ -2323,7 +2336,7 @@ fa125FirmwareWaitForReady(int id, int nwait, int *rwait)
   return OK;
 }
 
-int
+static int
 fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone)
 {
 #ifdef DOSTAYON
@@ -2387,7 +2400,7 @@ fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone)
   return OK;
 }
 
-int
+static int
 fa125FirmwareWriteToBuffer(int id, int ipage)
 {
   int ibadr=0;
@@ -2451,7 +2464,7 @@ fa125FirmwareWriteToBuffer(int id, int ipage)
   return OK;
 }
 
-int
+static int
 fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone)
 {
   if(id==0) id=fa125ID[0];
@@ -2494,7 +2507,7 @@ fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone)
   return OK;
 }
 
-int
+static int
 fa125FirmwareWaitForPushBufferToMain(int id, int ipage)
 {
   int rwait=0;
@@ -2537,7 +2550,7 @@ fa125FirmwareWaitForPushBufferToMain(int id, int ipage)
   return OK;
 }
 
-int
+static int
 fa125FirmwareReadMainPage(int id, int ipage, int stayon)
 {
   int ibadr=0;
@@ -2608,7 +2621,7 @@ fa125FirmwareReadMainPage(int id, int ipage, int stayon)
   return OK;
 }
 
-int
+static int
 fa125FirmwareReadBuffer(int id)
 {
   int ibadr=0;
@@ -2658,7 +2671,90 @@ fa125FirmwareReadBuffer(int id)
   return OK;
 }
 
-int
+static int
+fa125FirmwareVerifyFull(int id)
+{
+  int ipage=0;
+  int stayon=1;
+  struct timespec time_start, time_end, res;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(MCS_loaded==0)
+    {
+      printf("%s: ERROR: MCS file not loaded into memory\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.npages_read              = 0;
+      fa125FWstats.main_page_read_time.tv_sec  = 0;
+      fa125FWstats.main_page_read_time.tv_nsec = 0;
+    }
+  
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->main.configCSR, 0);
+  FA125UNLOCK;
+
+  printf("%s: Verifying main memory\n",__FUNCTION__);
+  for(ipage=0; ipage<MCS_pageSize; ipage++)
+    {
+      if((ipage%(8*0x10))==0)
+	{
+	  printf(".");
+	  fflush(stdout);
+	}
+
+      
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  clock_gettime(CLOCK_MONOTONIC, &time_start);
+	}
+      if(ipage==(MCS_pageSize-1)) stayon=0;
+
+      /* Read a page from main memory */
+      if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
+	{
+	  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+	  printf("%s: Error reading from main memory (page = %d)\n",
+		 __FUNCTION__,ipage);
+	  return ERROR;
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  fa125FWstats.npages_read++;
+	  clock_gettime(CLOCK_MONOTONIC, &time_end);
+	  res = tsSubtract(time_end, time_start);
+	  fa125FWstats.main_page_read_time = tsAdd(fa125FWstats.main_page_read_time, res);
+	}
+
+      /* Verify the page with that read from the file */
+      if(fa125FirmwareVerifyPage(ipage)!=OK)
+	{
+	  printf("%s: ERROR in verifying page %d\n",
+		 __FUNCTION__,ipage);
+	  return ERROR;
+	}
+
+    }
+  printf("\n");
+
+
+  return OK;
+
+}
+
+static int
 fa125FirmwareVerifyPage(int ipage)
 {
   int ibyte=0;
@@ -2693,7 +2789,7 @@ fa125FirmwareVerifyPage(int ipage)
   return OK;
 }
 
-int
+static int
 fa125FirmwareVerifyErasedPage(int ipage)
 {
   int ibyte=0;
@@ -2871,6 +2967,7 @@ fa125FirmwareReadMcsFile(char *filename)
   return OK;
 }
 
+
 int
 fa125FirmwareEraseFull(int id)
 {
@@ -2907,7 +3004,10 @@ fa125FirmwareEraseFull(int id)
 	{
 	  clock_gettime(CLOCK_MONOTONIC, &time_start);
 	}
-      if(iblock==(nblocks-1)) 
+
+#ifdef SKIP
+      // FIXME: I dont think we need this anymore
+      if(iblock==(nblocks-1))
 	{
 	  if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
 	    {
@@ -2916,11 +3016,15 @@ fa125FirmwareEraseFull(int id)
 	    }
 	  stayon=0;
 	}
+#endif
+
+      /* Perform a block erase */
       if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
 	{
 	  printf("%s: Block erase failed\n",__FUNCTION__);
 	  return ERROR;
 	}
+
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  fa125FWstats.nblocks_erased++;
@@ -2932,7 +3036,6 @@ fa125FirmwareEraseFull(int id)
     }
   printf("\n");
   fflush(stdout);
-
 
   taskDelay(3);
 
@@ -2951,6 +3054,7 @@ fa125FirmwareEraseFull(int id)
 	  for(ipage=iblock*8; ipage<8*(iblock+1); ipage++)
 	    {
 
+	      /* Read a page from main memory */
 	      if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
 		{
 		  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
@@ -2959,6 +3063,7 @@ fa125FirmwareEraseFull(int id)
 		  return ERROR;
 		}
 	  
+	      /* Verify the page was erased */
 	      if(fa125FirmwareVerifyErasedPage(ipage)!=OK)
 		{
 		  printf("%s: Block erase failed to erase block %d (page %d)\n",
@@ -2970,6 +3075,128 @@ fa125FirmwareEraseFull(int id)
       printf("\n");
       fflush(stdout);
     }
+
+  return OK;
+
+}
+
+int
+fa125FirmwareGEraseFull()
+{
+  int ipage=0;
+  int iblock=0, nblocks=1024;
+  int stayon=1;
+  struct timespec time_start, time_end, res;
+  int id=0, ifa=0;
+  
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nblocks_erased=0;
+      fa125FWstats.erase_time.tv_sec  = 0;
+      fa125FWstats.erase_time.tv_nsec = 0;
+    }
+
+  printf("%s: Erase it all\n",__FUNCTION__);
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      for(iblock=0; iblock<nblocks; iblock++)
+	{
+	  if(((iblock%0x10)==0) & (ifa==0))
+	    {
+	      printf(".");
+	      fflush(stdout);
+	    }
+
+	  if((iblock!=0) && (ifa==0))
+	    {
+	      /* Wait for the previous block on first module to complete */
+	      taskDelay(6);
+
+	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+		{
+		  fa125FWstats.nblocks_erased++;
+		  clock_gettime(CLOCK_MONOTONIC, &time_end);
+		  res = tsSubtract(time_end, time_start);
+		  fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
+		}
+	    }
+	  
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      clock_gettime(CLOCK_MONOTONIC, &time_start);
+	    }
+
+	  /* Perform a block erase */
+	  if(fa125FirmwareBlockErase(id,iblock,stayon,0)!=OK)
+	    {
+	      printf("%s: Slot %d: Block erase failed to begin\n",
+		     __FUNCTION__,id);
+	      return ERROR;
+	    }
+
+	} /* nblocks */
+      
+    } /* nfa125 */
+
+  printf("\n");
+  fflush(stdout);
+
+  /* Wait for last block erase to complete */
+  taskDelay(6);
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nblocks_erased++;
+      clock_gettime(CLOCK_MONOTONIC, &time_end);
+      res = tsSubtract(time_end, time_start);
+      fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
+    }
+  
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_VERIFY_ERASE)
+      {
+	stayon=1;
+	printf("%s: Verify erase\n",__FUNCTION__);
+
+	for(ifa=0; ifa<nfa125; ifa++)
+	  {
+	    id = fa125Slot(ifa);
+	    
+	    for(iblock=0; iblock<nblocks; iblock++)
+	      {
+		if(((iblock%0x10)==0) && (ifa==0))
+		  {
+		    printf(".");
+		    fflush(stdout);
+		  }
+	      
+		for(ipage=iblock*8; ipage<8*(iblock+1); ipage++)
+		  {
+		  
+		    /* Read a page from main memory */
+		    if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
+		      {
+			vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+			printf("%s: Slot %d: Error reading from main memory (page = %d)\n",
+			       __FUNCTION__,id,ipage);
+			return ERROR;
+		      }
+		  
+		    /* Verify the page with that read from the file */
+		    if(fa125FirmwareVerifyErasedPage(ipage)!=OK)
+		      {
+			printf("%s: Slot %d: Block erase failed to erase block %d (page %d)\n",
+			       __FUNCTION__,id, iblock,ipage);
+			return ERROR;
+		      }
+		  }
+	      } /* nblocks */
+	  } /* nfa125 */
+
+	printf("\n");
+	fflush(stdout);
+      }
 
   return OK;
 
@@ -3075,10 +3302,10 @@ fa125FirmwareWriteFull(int id)
 }
 
 int
-fa125FirmwareVerifyFull(int id)
+fa125FirmwareGWriteFull()
 {
+  int id=0, ifa=0;
   int ipage=0;
-  int stayon=1;
   struct timespec time_start, time_end, res;
 
   if(id==0) id=fa125ID[0];
@@ -3089,68 +3316,124 @@ fa125FirmwareVerifyFull(int id)
       return ERROR;
     }
 
-  if(MCS_loaded==0)
-    {
-      printf("%s: ERROR: MCS file not loaded into memory\n",
-	     __FUNCTION__);
-      return ERROR;
-    }
-
-
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
-      fa125FWstats.npages_read              = 0;
-      fa125FWstats.main_page_read_time.tv_sec  = 0;
-      fa125FWstats.main_page_read_time.tv_nsec = 0;
+      fa125FWstats.nbuffers_written          = 0;
+      fa125FWstats.buffer_write_time.tv_sec  = 0;
+      fa125FWstats.buffer_write_time.tv_nsec = 0;
+
+      fa125FWstats.nbuffers_pushed          = 0;
+      fa125FWstats.buffer_push_time.tv_sec  = 0;
+      fa125FWstats.buffer_push_time.tv_nsec = 0;
     }
-  
-  FA125LOCK;
-  vmeWrite32(&fa125p[id]->main.configCSR, 0);
-  FA125UNLOCK;
 
-  printf("%s: Verifying main memory\n",__FUNCTION__);
-  for(ipage=0; ipage<MCS_pageSize; ipage++)
+  printf("%s: Writing file to memory\n",__FUNCTION__);
+  for(ifa=0; ifa<nfa125; ifa++)
     {
-      if((ipage%(8*0x10))==0)
-	{
-	  printf(".");
-	  fflush(stdout);
-	}
+      id = fa125Slot(ifa);
 
-      
-      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+      for(ipage=0; ipage<MCS_pageSize; ipage++)
 	{
-	  clock_gettime(CLOCK_MONOTONIC, &time_start);
-	}
-      if(ipage==(MCS_pageSize-1)) stayon=0;
-      if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
+	  
+	  if(((ipage%(8*0x10))==0) && (ifa==0))
+	    {
+	      printf(".");
+	      fflush(stdout);
+	    }
+
+	  if(ipage!=0)
+	    {
+	      if(fa125FirmwareWaitForPushBufferToMain(id, ipage-1)!=OK)
+		{
+		  printf("%s: Slot %d: Failed to push buffer to main (page %d)\n",
+			 __FUNCTION__,id,ipage-1);
+		  return ERROR;
+		}
+
+	      /* Wait for the previous page push to complete */
+	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+		{
+		  fa125FWstats.nbuffers_pushed++;
+		  clock_gettime(CLOCK_MONOTONIC, &time_end);
+		  res = tsSubtract(time_end, time_start);
+		  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
+		}
+	    }
+
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      clock_gettime(CLOCK_MONOTONIC, &time_start);
+	    }
+
+	  /* Write page to buffer */
+	  if(fa125FirmwareWriteToBuffer(id, ipage)!=OK)
+	    {
+	      printf("%s: Error writing to buffer\n",__FUNCTION__);
+	      return ERROR;
+	    }
+
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      fa125FWstats.nbuffers_written++;
+	      clock_gettime(CLOCK_MONOTONIC, &time_end);
+	      res = tsSubtract(time_end, time_start);
+	      fa125FWstats.buffer_write_time = tsAdd(fa125FWstats.buffer_write_time, res);
+	    }
+
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      clock_gettime(CLOCK_MONOTONIC, &time_start);
+	    }
+
+	  /* Push buffer to main */
+	  if(fa125FirmwarePushBufferToMain(id, ipage, 0)!=OK)
+	    {
+	      printf("%s: Error in pushing buffer to main memory (page = %d)\n",
+		     __FUNCTION__,ipage);
+	      return ERROR;
+	    }
+
+	} /* MCS_pageSize */
+    } /* nfa125 */
+
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      /* Wait for last page push to complete */
+      if(fa125FirmwareWaitForPushBufferToMain(id, MCS_pageSize-1)!=OK)
 	{
-	  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
-	  printf("%s: Error reading from main memory (page = %d)\n",
-		 __FUNCTION__,ipage);
+	  printf("%s: Slot %d: Failed to push buffer to main (page %d)\n",
+		 __FUNCTION__,id,ipage-1);
 	  return ERROR;
 	}
+
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
-	  fa125FWstats.npages_read++;
+	  fa125FWstats.nbuffers_pushed++;
 	  clock_gettime(CLOCK_MONOTONIC, &time_end);
 	  res = tsSubtract(time_end, time_start);
-	  fa125FWstats.main_page_read_time = tsAdd(fa125FWstats.main_page_read_time, res);
+	  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
 	}
+      
+    } /* nfa125 */
+  
+  printf("\n");
+  fflush(stdout);
 
-      if(fa125FirmwareVerifyPage(ipage)!=OK)
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      if(fa125FirmwareVerifyFull(id)!=OK)
 	{
-	  printf("%s: ERROR in verifying page %d\n",
-		 __FUNCTION__,ipage);
+	  printf("%s: Slot %d: Error in verifying full firmware\n",
+		 __FUNCTION__,id);
 	  return ERROR;
 	}
-
     }
-  printf("\n");
-
-
+  
   return OK;
-
 }
 
 void
@@ -3169,34 +3452,34 @@ fa125FirmwarePrintTimes()
 
   printf("\n");
 
-  printf("NBlocks Erased  = %d\n",
+  printf(" Blocks Erased  = %d\n",
 	 fa125FWstats.nblocks_erased);
-  printf("Erase time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+  printf(" Erase time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
 	 fa125FWstats.erase_time.tv_sec,
 	 fa125FWstats.erase_time.tv_nsec,
 	 erase);
   printf("\n");
 
-  printf("NPages written  = %d\n",
+  printf(" Pages written  = %d\n",
 	 fa125FWstats.nbuffers_written);
-  printf("Write time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+  printf(" Write time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
 	 fa125FWstats.buffer_write_time.tv_sec,
 	 fa125FWstats.buffer_write_time.tv_nsec,
 	 write);
   printf("\n");
 
-  printf("NPages pushed   = %d\n",
+  printf(" Pages pushed   = %d\n",
 	 fa125FWstats.nbuffers_pushed);
-  printf(" Push time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+  printf(" Push time    %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
 	 fa125FWstats.buffer_push_time.tv_sec,
 	 fa125FWstats.buffer_push_time.tv_nsec,
 	 push);
   printf("\n");
   
 
-  printf("NPages read    = %d\n",
+  printf(" Pages verified = %d\n",
 	 fa125FWstats.npages_read);
-  printf(" Read time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+  printf(" Read time    %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
 	 fa125FWstats.main_page_read_time.tv_sec,
 	 fa125FWstats.main_page_read_time.tv_nsec,
 	 read);
