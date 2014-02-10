@@ -71,7 +71,7 @@ OBJS			= fa125Lib.o
 
 LIBS			= libfa125.a
 
-all: $(LIBS) links
+all: $(LIBS)
 
 libfa125.a: fa125Lib.o
 	$(CC) -fpic -shared $(CFLAGS) -o libfa125.so fa125Lib.c
@@ -85,6 +85,11 @@ links: libfa125.a
 	ln -sf $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
 	ln -sf $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
 	ln -sf $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
+
+install: libfa125.a
+	@cp -v $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
+	@cp -v $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
+	@cp -v $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
 
 %: %.c libfa125.a
 	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -lfa125

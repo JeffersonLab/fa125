@@ -52,7 +52,8 @@ main(int argc, char *argv[]) {
       {
 	exit(-1);
       }
-
+    
+    vmeSetQuietFlag(0);
     status = vmeOpenDefaultWindows();
     if(status<0)
       {
@@ -86,10 +87,13 @@ main(int argc, char *argv[]) {
       }
 
 /*     fa125FirmwareVerifyFull(0); */
-    fa125FirmwareEraseFull(0);
-    fa125FirmwareSetDebug(1);
-    fa125FirmwareWriteFull(0);
-    
+    fa125FirmwareSetDebug(FA125_FIRMWARE_DEBUG_MEASURE_TIMES |
+			  FA125_FIRMWARE_DEBUG_VERIFY_ERASE);
+/*     fa125FirmwareEraseFull(0); */
+/*     fa125FirmwareWriteFull(0); */
+    fa125FirmwareGEraseFull();
+    fa125FirmwareGWriteFull();
+    fa125FirmwarePrintTimes();
     goto CLOSE;
 
  CLOSE:

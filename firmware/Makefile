@@ -48,7 +48,7 @@ RANLIB                  = ranlib
 CFLAGS			= -Wall -O2 -I${LINUXVME_INC} -I. -I/usr/include \
 			  -L${LINUXVME_LIB} -L.
 OBJS			=
-PROGS			= fa125FirmwareUpdate
+PROGS			= fa125FirmwareUpdate fa125GFirmwareUpdate
 endif
 
 ifeq ($(ARCH),VXWORKSPPC)
