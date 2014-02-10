@@ -20,14 +20,13 @@
  *     Driver library for readout of the 125MSPS ADC using vxWorks 5.5 
  *     (or later) or Intel based single board computer
  *
- * SVN: $Rev$
- *
  *----------------------------------------------------------------------------*/
 
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
+#include <ctype.h>
 #ifdef VXWORKS
 #include <vxWorks.h>
 #include <logLib.h>
@@ -99,6 +98,11 @@ int fa125BlockError=0;       /* Whether (1) or not (0) Block Transfer had an err
  *           for VME addresses.
  *          0: Initialize with addr and addr_inc
  *          1: Use fa125AddrList 
+ *
+ *     18:  Skip firmware check.  Useful for firmware updating.
+ *             0 Perform firmware check
+ *             1 Skip firmware check
+ *
  */
 
 int
@@ -108,7 +112,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   volatile unsigned int rdata=0;
   unsigned int laddr=0, a32addr=0;
   volatile struct fa125_a24 *fa125;
-  int useList=0, noBoardInit=0;
+  int useList=0, noBoardInit=0, noFirmwareCheck=0;;
   int nfind=0, islot=0, FA_SLOT=0, ii=0;
   int trigSrc=0, clkSrc=0, srSrc=0;
   unsigned int boardID=0, fw_version=0;
@@ -121,15 +125,22 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   memset((char *)fa125dacOffset,0,sizeof(fa125dacOffset));
 
   /* Check if we're skipping initialization, and just mapping the structure pointer */
-  if(iFlag & (1<<16))
+  if(iFlag & FA125_INIT_SKIP)
     noBoardInit=1;
 
   /* Check if we're initializing using a list */
-  if(iFlag & (1<<17))
+  if(iFlag & FA125_INIT_USE_ADDRLIST)
     {
       useList=1;
       nfind = nadc;
     }
+
+  /* Are we skipping the firmware check? */
+  if(iFlag & FA125_INIT_SKIP_FIRMWARE_CHECK)
+    {
+      noFirmwareCheck=1;
+    }
+
 
   /* Check for valid address */
   if((addr==0) && (useList==0))
@@ -226,7 +237,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 #endif
       if(res < 0) 
 	{
-	  printf("%s: ERROR: No addressable board at addr=0x%x\n",
+	  printf("%s: WARN: No addressable board at addr=0x%x\n",
 		 __FUNCTION__,(UINT32) fa125AddrList[islot]);
 	}
       else 
@@ -255,31 +266,55 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
 
 	      /* Check the Firmware Versions */
-	      /* MAIN */
-	      fw_version = vmeRead32(&fa125->main.version);
-	      if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
+	      if(noFirmwareCheck)
 		{
-		  printf("%s: ERROR: For module at 0x%x, Unsupported MAIN firmware version 0x%x\n",
-			 __FUNCTION__,fa125AddrList[islot],fw_version);
-/* 		  continue; */
+		  printf("%s: INFO: Firmware Check Disabled\n",
+			 __FUNCTION__);
 		}
-
-	      /* PROC */
-	      fw_version = vmeRead32(&fa125->proc.version);
-	      if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
+	      else
 		{
-		  printf("%s: ERROR: For module at 0x%x, Unsupported PROC firmware version 0x%x\n",
-			 __FUNCTION__,fa125AddrList[islot],fw_version);
-/* 		  continue; */
-		}
+		  int fw_error=0;
+		  /* MAIN */
+		  fw_version = vmeRead32(&fa125->main.version);
+		  if(fw_version==0xffffffff)
+		    { /* buggy firmware.. re-read */
+		      fw_version = vmeRead32(&fa125->main.version);
+		    }
+		  if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
+		    {
+		      printf("%s: ERROR: For module at 0x%x, Unsupported MAIN firmware version 0x%x\n",
+			     __FUNCTION__,fa125AddrList[islot],fw_version);
+		      fw_error=1;
+		    }
 
-	      /* FE - just check the first one */
-	      fw_version = vmeRead32(&fa125->fe[0].version);
-	      if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
-		{
-		  printf("%s: ERROR: For module at 0x%x, Unsupported FE firmware version 0x%x\n",
-			 __FUNCTION__,fa125AddrList[islot],fw_version);
-/* 		  continue; */
+		  /* PROC */
+		  fw_version = vmeRead32(&fa125->proc.version);
+		  if(fw_version==0xffffffff)
+		    { /* buggy firmware.. re-read */
+		      fw_version = vmeRead32(&fa125->proc.version);
+		    }
+		  if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
+		    {
+		      printf("%s: ERROR: For module at 0x%x, Unsupported PROC firmware version 0x%x\n",
+			     __FUNCTION__,fa125AddrList[islot],fw_version);
+		      fw_error=1;
+		    }
+
+		  /* FE - just check the first one */
+		  fw_version = vmeRead32(&fa125->fe[0].version);
+		  if(fw_version==0xffffffff)
+		    { /* buggy firmware.. re-read */
+		      fw_version = vmeRead32(&fa125->fe[0].version);
+		    }
+		  if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
+		    {
+		      printf("%s: ERROR: For module at 0x%x, Unsupported FE firmware version 0x%x\n",
+			     __FUNCTION__,fa125AddrList[islot],fw_version);
+		      fw_error=1;
+		    }
+
+		  if(fw_error)
+		    continue;
 		}
 
 	      /* Get the Geographic Address */
@@ -2197,5 +2232,1333 @@ fa125DecodeData(unsigned int data)
       type_last = fadc_data.type;    /* save type of current data word */
       
     }
+
+}
+
+/************************************************************
+ *  fa125 Firmware Updating Routines 
+ ************************************************************/
+#define        MCS_MAX_SIZE    (FA125_FIRMWARE_MAX_PAGES*FA125_FIRMWARE_MAX_BYTE_PER_PAGE)
+static unsigned int   MCS_dataSize = 0;          /* Size of the array holding the firmware */
+static unsigned int   MCS_pageSize = 0;          /* Number of pages read from MCS file */
+static unsigned char  MCS_DATA[FA125_FIRMWARE_MAX_PAGES][FA125_FIRMWARE_MAX_BYTE_PER_PAGE];    /* The array holding the firmware */
+static int            MCS_loaded = 0;             /* 1(0) if firmware loaded (not loaded) */
+static unsigned char  tmp_pageData[FA125_FIRMWARE_MAX_BYTE_PER_PAGE];
+static int            fa125FirmwareDebug=0;
+enum   ifpgatype      {MAIN, FE, PROC, NFPGATYPE};
+struct fpga_fw_info 
+{
+  char name[5];
+  unsigned int size;
+  unsigned int location;
+  unsigned int page_location;
+  unsigned int page_byte_location;
+};
+
+struct firmware_stats
+{
+  struct timespec erase_time;
+  unsigned int nblocks_erased;
+  struct timespec buffer_write_time;
+  unsigned int nbuffers_written;
+  struct timespec buffer_push_time;
+  unsigned int nbuffers_pushed;
+  struct timespec main_page_read_time;
+  unsigned int npages_read;
+};
+
+static struct timespec  
+tsSubtract(struct  timespec  time1, struct  timespec  time2)
+{    /* Local variables. */
+  struct  timespec  result;
+
+  /* Subtract the second time from the first. */
+  if ((time1.tv_sec < time2.tv_sec) ||
+      ((time1.tv_sec == time2.tv_sec) &&
+       (time1.tv_nsec <= time2.tv_nsec))) 
+    {		/* TIME1 <= TIME2? */
+      result.tv_sec = result.tv_nsec = 0;
+    } 
+  else 
+    {						/* TIME1 > TIME2 */
+      result.tv_sec = time1.tv_sec - time2.tv_sec;
+      if (time1.tv_nsec < time2.tv_nsec) 
+	{
+	  result.tv_nsec = time1.tv_nsec + 1000000000L - time2.tv_nsec;
+	  result.tv_sec--;				/* Borrow a second. */
+	} 
+      else 
+	{
+	  result.tv_nsec = time1.tv_nsec - time2.tv_nsec;
+	}
+    }
+  
+  return (result);
+}
+
+static struct timespec  
+tsAdd(struct  timespec  time1, struct  timespec  time2)
+{    
+  /* Local variables. */
+  struct  timespec  result ;
+  
+  /* Add the two times together. */
+  result.tv_sec = time1.tv_sec + time2.tv_sec ;
+  result.tv_nsec = time1.tv_nsec + time2.tv_nsec ;
+  if (result.tv_nsec >= 1000000000L) 
+    {		/* Carry? */
+      result.tv_sec++ ;  result.tv_nsec = result.tv_nsec - 1000000000L ;
+    }
+    
+  return (result) ;
+}
+
+struct firmware_stats fa125FWstats;
+
+struct fpga_fw_info sfpga[NFPGATYPE] =
+  {
+    {"MAIN", 0x45480,  0x0,      0, 0},
+    {"FE"  , 0xC435A,  0x754E0,  0, 0},
+    {"PROC", 0x1659FA, 0x1E1B90, 0, 0}
+  };
+
+/* Static Firmware Updating routine prototypes */
+static int fa125FirmwareWaitForReady(int id, int nwait, int *rwait);
+static int fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone);
+static int fa125FirmwareWriteToBuffer(int id, int ipage);
+static int fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone);
+static int fa125FirmwareWaitForPushBufferToMain(int id, int ipage);
+static int fa125FirmwareReadMainPage(int id, int ipage, int stayon);
+static int fa125FirmwareReadBuffer(int id);
+static int fa125FirmwareVerifyFull(int id);
+static int fa125FirmwareVerifyPage(int ipage);
+static int fa125FirmwareVerifyErasedPage(int ipage);
+static int hex2num(char c);
+
+void
+fa125FirmwareSetDebug(unsigned int debug)
+{
+  fa125FirmwareDebug=debug;
+}
+
+static int
+fa125FirmwareWaitForReady(int id, int nwait, int *rwait)
+{
+  int iwait=0, rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  for(iwait=0; iwait<nwait; iwait++)
+    {
+      rval = vmeRead32(&fa125p[id]->main.configCSR) & FA125_CONFIGCSR_BUSY;
+      if(rval==FA125_CONFIGCSR_BUSY)
+	break;
+    }
+
+  *rwait = iwait;
+
+  if(iwait==nwait)
+    {
+      printf("%s: Operation still in progress after %d tries.\n",
+	     __FUNCTION__,iwait);
+      return ERROR;
+    }
+
+  return OK;
+}
+
+static int
+fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone)
+{
+#ifdef DOSTAYON
+  int rwait=0;
+#endif
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+
+  /* Configuration csr for block erase */
+  vmeWrite32(&fa125p[id]->main.configCSR, 
+	     FA125_CONFIGCSR_PROG_ENABLE | (FA125_OPCODE_ERASE<<24));
+
+  /* Erase blocks using top 10 bits of page address [30... 21] 0-1023 */
+  vmeWrite32(&fa125p[id]->main.configAdrData,
+	     (iblock<<21));
+  vmeWrite32(&fa125p[id]->main.configAdrData,
+	     FA125_CONFIGADRDATA_EXEC | (iblock<<21));
+  vmeWrite32(&fa125p[id]->main.configAdrData,
+	     (iblock<<21));
+
+  if(waitForDone==0)
+    {
+      FA125UNLOCK;
+      return OK;
+    }
+
+  taskDelay(6);
+
+#ifdef DOSTAYON
+  /* Pull Execute low before asserting new configuration type */
+  if(stayon==0)
+    {
+      taskDelay(1);
+      vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+      
+      if(fa125FirmwareWaitForReady(id,100,&rwait)!=OK)
+	{
+	  printf("%s: ERROR: Pull down execute timeout (rwait = %d).\n",
+		 __FUNCTION__,
+		 rwait);
+	  FA125UNLOCK;
+	  return ERROR;
+	}
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_WAIT_FOR_READY)
+	{
+	  printf("%s: Pull Execute low. wait ticks = %d\n",
+		 __FUNCTION__,rwait);
+	}
+    }
+#endif
+
+  FA125UNLOCK;
+  return OK;
+}
+
+static int
+fa125FirmwareWriteToBuffer(int id, int ipage)
+{
+  int ibadr=0;
+  unsigned char data=0;
+  int rwait=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(ipage>(FA125_FIRMWARE_MAX_PAGES-1))
+    {
+      printf("%s: ERROR: ipage > Maximum page count (%d > %d)\n",
+	     __FUNCTION__, ipage, (FA125_FIRMWARE_MAX_PAGES-1));
+    }
+
+  if(MCS_loaded==0)
+    {
+      printf("%s: ERROR: MCS file not loaded into memory\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  /* Configuration csr for buffer write */
+  vmeWrite32(&fa125p[id]->main.configCSR, 
+	     FA125_CONFIGCSR_PROG_ENABLE | (FA125_OPCODE_BUFFER_WRITE<<24));
+
+  // FIXME: Do I need this?
+/*   vmeWrite32(&fa125p[id]->main.configAdrData, */
+/* 	     FA125_CONFIGADRDATA_EXEC); */
+
+  /* Write configuration data byte using byte addresses 0-527 */
+  for(ibadr=0; ibadr<528; ibadr++)
+    {
+      data = MCS_DATA[ipage][ibadr];
+
+      vmeWrite32(&fa125p[id]->main.configAdrData,
+		 (ibadr<<8) | data);
+      vmeWrite32(&fa125p[id]->main.configAdrData,
+		 FA125_CONFIGADRDATA_EXEC | (ibadr<<8) | data);
+      vmeWrite32(&fa125p[id]->main.configAdrData,
+		 (ibadr<<8) | data);
+
+      if(fa125FirmwareWaitForReady(id,1000000,&rwait)!=OK)
+	{
+	  printf("%s: ERROR: Buffer Write timeout (byte address = %d, page = %d) (rwait = %d).\n",
+		 __FUNCTION__,
+		 ibadr,ipage,
+		 rwait);
+	  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+	  FA125UNLOCK;
+	  return ERROR;
+	}
+    }
+
+  FA125UNLOCK;
+  return OK;
+}
+
+static int
+fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(ipage>(FA125_FIRMWARE_MAX_PAGES-1))
+    {
+      printf("%s: ERROR: ipage > Maximum page count (%d > %d)\n",
+	     __FUNCTION__, ipage, (FA125_FIRMWARE_MAX_PAGES-1));
+      return ERROR;
+    }
+
+  FA125LOCK;
+  /* Configuration csr for buffer to main memory */
+  vmeWrite32(&fa125p[id]->main.configCSR, 
+	     FA125_CONFIGCSR_PROG_ENABLE | (FA125_OPCODE_BUFFER_PUSH<<24));
+
+  /* Push buffer contents using page address */
+  vmeWrite32(&fa125p[id]->main.configAdrData,
+	     (ipage<<18));
+  vmeWrite32(&fa125p[id]->main.configAdrData,
+	     FA125_CONFIGADRDATA_EXEC | (ipage<<18));
+  vmeWrite32(&fa125p[id]->main.configAdrData,
+	     (ipage<<18));
+  FA125UNLOCK;
+
+  if(waitForDone==0)
+    {
+      return OK;
+    }
+
+  if(fa125FirmwareWaitForPushBufferToMain(id, ipage)!=OK)
+    return ERROR;
+
+  return OK;
+}
+
+static int
+fa125FirmwareWaitForPushBufferToMain(int id, int ipage)
+{
+  int rwait=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  if(fa125FirmwareWaitForReady(id,100000,&rwait)!=OK)
+    {
+      printf("%s: ERROR: Push to main memory timeout (page = %d) (rwait = %d).\n",
+	     __FUNCTION__,
+	     ipage,rwait);
+      vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+      FA125UNLOCK;
+      return ERROR;
+    }
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_WAIT_FOR_READY)
+    {
+      printf("%s: Push buffer contents using page address.  rwait = %d\n",
+	     __FUNCTION__,rwait);
+    }
+  
+  /* Pull Execute low before asserting new configuration type */
+  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+  if(fa125FirmwareWaitForReady(id,100,&rwait)!=OK)
+    {
+      printf("%s: ERROR: Pull down execute timeout (rwait = %d).\n",
+	     __FUNCTION__,
+	     rwait);
+      FA125UNLOCK;
+      return ERROR;
+    }
+
+  FA125UNLOCK;
+  return OK;
+}
+
+static int
+fa125FirmwareReadMainPage(int id, int ipage, int stayon)
+{
+  int ibadr=0;
+  int rwait=0;
+  unsigned int csraddr = 0;
+  unsigned int data=0;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(ipage>(FA125_FIRMWARE_MAX_PAGES-1))
+    {
+      printf("%s: ERROR: ipage > Maximum page count (%d > %d)\n",
+	     __FUNCTION__, ipage, FA125_FIRMWARE_MAX_PAGES-1);
+    }
+
+  memset((char *)tmp_pageData, 0, sizeof(tmp_pageData));
+/*   taskDelay(1); */
+
+  FA125LOCK;
+  /* Configuration csr for main memory read */
+  vmeWrite32(&fa125p[id]->main.configCSR, 
+	     FA125_CONFIGCSR_PROG_ENABLE | (FA125_OPCODE_MAIN_READ<<24));
+
+  for(ibadr=0; ibadr<FA125_FIRMWARE_MAX_BYTE_PER_PAGE; ibadr++)
+    {
+      csraddr = (ipage<<18) | (ibadr<<8);
+      vmeWrite32(&fa125p[id]->main.configAdrData, csraddr);
+      vmeWrite32(&fa125p[id]->main.configAdrData, FA125_CONFIGADRDATA_EXEC | csraddr);
+      vmeWrite32(&fa125p[id]->main.configAdrData, csraddr);
+      if(fa125FirmwareWaitForReady(id,10000,&rwait)!=OK)
+	{
+	  printf("%s: ERROR: Main memory read timeout (byte address = %d, page = %d) (rwait = %d).\n",
+		 __FUNCTION__,
+		 ibadr,ipage,rwait);
+	  FA125UNLOCK;
+	  return ERROR;
+	}
+      
+      data = vmeRead32(&fa125p[id]->main.configCSR);
+      tmp_pageData[ibadr] = data & FA125_CONFIGCSR_DATAREAD_MASK;
+
+    }
+
+  /* Pull Execute low before asserting new configuration type */
+#ifdef DOSTAYON
+  if(stayon==0)
+    {
+      vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+      if(fa125FirmwareWaitForReady(id,100,&rwait)!=OK)
+	{
+	  printf("%s: ERROR: Pull down execute timeout (rwait = %d).\n",
+		 __FUNCTION__,
+		 rwait);
+	  FA125UNLOCK;
+	  return ERROR;
+	}
+      taskDelay(1);
+    }
+#endif
+
+  FA125UNLOCK;
+  return OK;
+}
+
+static int
+fa125FirmwareReadBuffer(int id)
+{
+  int ibadr=0;
+  int rwait=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  memset((char *)tmp_pageData, 0, sizeof(tmp_pageData));
+
+  FA125LOCK;
+  /* Configuration csr for buffer memory read */
+  vmeWrite32(&fa125p[id]->main.configCSR, 
+	     FA125_CONFIGCSR_PROG_ENABLE | (FA125_OPCODE_BUFFER_READ<<24));
+
+/*   taskDelay(1); */
+
+  /* Read main memory using full address (page and byte) */
+  for(ibadr=0; ibadr<FA125_FIRMWARE_MAX_BYTE_PER_PAGE; ibadr++)
+    {
+      vmeWrite32(&fa125p[id]->main.configAdrData,
+		 (ibadr<<8));
+      vmeWrite32(&fa125p[id]->main.configAdrData,
+		 FA125_CONFIGADRDATA_EXEC | (ibadr<<8));
+      vmeWrite32(&fa125p[id]->main.configAdrData,
+		 (ibadr<<8));
+      if(fa125FirmwareWaitForReady(id,100,&rwait)!=OK)
+	{
+	  printf("%s: ERROR: Main memory read timeout (byte address = %d) (rwait = %d)\n.",
+		 __FUNCTION__,
+		 ibadr,rwait);
+	  FA125UNLOCK;
+	  return ERROR;
+	}
+
+      tmp_pageData[ibadr] = vmeRead32(&fa125p[id]->main.configCSR) & FA125_CONFIGCSR_DATAREAD_MASK;
+    }
+
+  /* Pull Execute low before asserting new configuration type */
+  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+
+  FA125UNLOCK;
+  return OK;
+}
+
+static int
+fa125FirmwareVerifyFull(int id)
+{
+  int ipage=0;
+  int stayon=1;
+  struct timespec time_start, time_end, res;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(MCS_loaded==0)
+    {
+      printf("%s: ERROR: MCS file not loaded into memory\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.npages_read                 = 0;
+      fa125FWstats.main_page_read_time.tv_sec  = 0;
+      fa125FWstats.main_page_read_time.tv_nsec = 0;
+    }
+  
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->main.configCSR, 0);
+  FA125UNLOCK;
+
+  printf("%3d: ",id);
+  fflush(stdout);
+
+  for(ipage=0; ipage<=MCS_pageSize; ipage++)
+    {
+      if((ipage%(8*0x10))==0)
+	{
+	  printf(".");
+	  fflush(stdout);
+	}
+
+      
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  clock_gettime(CLOCK_MONOTONIC, &time_start);
+	}
+      if(ipage==(MCS_pageSize-1)) stayon=0;
+
+      /* Read a page from main memory */
+      if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
+	{
+	  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+	  printf("%s: Error reading from main memory (page = %d)\n",
+		 __FUNCTION__,ipage);
+	  return ERROR;
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  fa125FWstats.npages_read++;
+	  clock_gettime(CLOCK_MONOTONIC, &time_end);
+	  res = tsSubtract(time_end, time_start);
+	  fa125FWstats.main_page_read_time = tsAdd(fa125FWstats.main_page_read_time, res);
+	}
+
+      /* Verify the page with that read from the file */
+      if(fa125FirmwareVerifyPage(ipage)!=OK)
+	{
+	  printf("%s: ERROR in verifying page %d\n",
+		 __FUNCTION__,ipage);
+	  return ERROR;
+	}
+
+    }
+  printf("\n");
+
+
+  return OK;
+
+}
+
+static int
+fa125FirmwareVerifyPage(int ipage)
+{
+  int ibyte=0;
+  int nerror=0;
+  if(MCS_loaded==0)
+    {
+      printf("%s: ERROR: MCS file not loaded into memory\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+
+  for(ibyte=0; ibyte<FA125_FIRMWARE_MAX_BYTE_PER_PAGE; ibyte++)
+    {
+      if(tmp_pageData[ibyte] != MCS_DATA[ipage][ibyte])
+	{
+	  nerror++;
+	  if(nerror<20)
+	    {
+	      printf("%s: %4d: Buffer (0x%02x) != MCS file (0x%02x)\n",
+		     __FUNCTION__,ibyte,tmp_pageData[ibyte],MCS_DATA[ipage][ibyte]);
+	    }
+	}
+    }
+
+  if(nerror>0)
+    {
+      printf("%s: ERROR: Total number of errors = %d\n",
+	     __FUNCTION__,nerror);
+      return ERROR;
+    }
+
+  return OK;
+}
+
+static int
+fa125FirmwareVerifyErasedPage(int ipage)
+{
+  int ibyte=0;
+  int nerror=0;
+
+  for(ibyte=0; ibyte<FA125_FIRMWARE_MAX_BYTE_PER_PAGE; ibyte++)
+    {
+      if(tmp_pageData[ibyte] != 0xff)
+	{
+	  nerror++;
+	  if(nerror<20)
+	    {
+	      printf("%s: %4d: Buffer (0x%02x) != Erased (0x%02x)\n",
+		     __FUNCTION__,ibyte,tmp_pageData[ibyte],0xff);
+	    }
+	}
+    }
+
+  if(nerror>0)
+    {
+      printf("%s: ERROR: Total number of errors = %d\n",
+	     __FUNCTION__,nerror);
+      return ERROR;
+    }
+
+  return OK;
+}
+
+static int
+hex2num(char c)
+{
+  c = toupper(c);
+
+  if(c > 'F')
+    return 0;
+
+  if(c >= 'A')
+    return 10 + c - 'A';
+
+  if((c > '9') || (c < '0') )
+    return 0;
+
+  return c - '0';
+}
+
+int
+fa125FirmwareReadMcsFile(char *filename)
+{
+  FILE *mcsFile=NULL;
+  char ihexLine[200], *pData;
+  int len=0, datalen=0;
+  unsigned int nbytes=0, line=0, hiChar=0, loChar=0;
+  int ibyte=0, ipage=0;
+  unsigned int readMCS=0;
+  int ichar;
+  int ifpga=MAIN; int fpga_bytes=0;
+
+  /* Initialize the local storage array */
+  memset((char *)MCS_DATA,0xff,sizeof(MCS_DATA));
+
+  /* Calculate the page and page_byte locations of the start of the fpga firmware */
+  for(ifpga=MAIN; ifpga<NFPGATYPE; ifpga++)
+    {
+      sfpga[ifpga].page_location = 
+	(unsigned int)(sfpga[ifpga].location/FA125_FIRMWARE_MAX_BYTE_PER_PAGE);
+      sfpga[ifpga].page_byte_location = 
+	(unsigned int)(sfpga[ifpga].location%FA125_FIRMWARE_MAX_BYTE_PER_PAGE);
+    }
+
+  mcsFile = fopen(filename,"r");
+  if(mcsFile==NULL)
+    {
+      perror("fopen");
+      printf("%s: ERROR opening file (%s) for reading\n",
+	     __FUNCTION__,filename);
+      return ERROR;
+    }
+
+  ifpga=MAIN; /* First firmware is for the MAIN FPGA */
+
+  while(!feof(mcsFile))
+    {
+      /* Get the current line */
+      if(!fgets(ihexLine, sizeof(ihexLine), mcsFile))
+	break;
+      
+      /* Get the the length of this line */
+      len = strlen(ihexLine);
+
+      if(len >= 5)
+	{
+	  /* Check for the start code */
+	  if(ihexLine[0] != ':')
+	    {
+	      printf("%s: ERROR parsing file at line %d\n",
+		     __FUNCTION__,line);
+	      return ERROR;
+	    }
+
+	  /* Get the byte count */
+	  hiChar = hex2num(ihexLine[1]);
+	  loChar = hex2num(ihexLine[2]);
+	  datalen = (hiChar)<<4 | loChar;
+
+	  if(strncmp("00",&ihexLine[7], 2) == 0) /* Data Record */
+	    {
+	      pData = &ihexLine[9]; /* point to the beginning of the data */
+	      while(datalen--)
+		{
+		  hiChar = hex2num(*pData++);
+		  loChar = hex2num(*pData++);
+		  MCS_DATA[ipage][ibyte] = 
+		    ((hiChar)<<4) | (loChar);
+		  fpga_bytes++;
+		  if(readMCS>=MCS_MAX_SIZE)
+		    {
+		      printf("%s: ERROR: TOO BIG!\n",__FUNCTION__);
+		      return ERROR;
+		    }
+/* 		  if(ipage<2) */
+/* 		    printf("%4d %3d: 0x%02x\n",ipage,ibyte,MCS_DATA[ipage][ibyte]); */
+		  if((ibyte+1)==FA125_FIRMWARE_MAX_BYTE_PER_PAGE)
+		    { /* If at the end of the page, start up a new one */
+		      ibyte=0;
+		      ipage++;
+		    }
+		  else
+		    {
+		      ibyte++;
+		    }
+		  if(fpga_bytes==sfpga[ifpga].size)
+		    { 
+		      /* End of this FPGA, Skip to the Next */
+		      ifpga++;
+		      if(ifpga!=NFPGATYPE) 
+			{
+			  ipage = sfpga[ifpga].page_location;
+			  ibyte = sfpga[ifpga].page_byte_location;
+			  fpga_bytes=0;
+			}
+		    }
+		  readMCS++;
+		  nbytes++;
+		}
+	    }
+	  else if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MCS_SKIPPED_LINES)
+	    {
+	      printf("%s: Skipped line (%d): \t>%s<\n",
+		     __FUNCTION__,line,ihexLine);
+	    }
+
+	}
+      line++;
+    }
+
+  MCS_pageSize = ipage;
+  MCS_dataSize = readMCS;
+  
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MCS_FILE)
+    {
+      printf("MCS_dataSize = %d   MCS_pageSize = %d\n",MCS_dataSize,MCS_pageSize);
+      
+      for(ichar=0; ichar<16*10; ichar++)
+	{
+	  if((ichar%16) == 0)
+	    printf("\n");
+	  printf("0x%02x ",MCS_DATA[0][ichar]);
+	}
+      printf("\n\n");
+    }
+
+  MCS_loaded = 1;
+
+  fclose(mcsFile);
+  return OK;
+}
+
+void
+fa125FirmwarePrintPage(int page)
+{
+  int ichar=0;
+
+  if(MCS_loaded==0)
+    {
+      printf("%s: ERROR: MCS file not loaded into memory\n",
+	     __FUNCTION__);
+      return;
+    }
+
+  for(ichar=0; ichar<FA125_FIRMWARE_MAX_BYTE_PER_PAGE; ichar++)
+    {
+      if((ichar%16) == 0)
+	printf("\n");
+      printf("0x%02x ",MCS_DATA[page][ichar]);
+    }
+  printf("\n\n");
+  
+
+
+}
+
+
+int
+fa125FirmwareEraseFull(int id)
+{
+  int ipage=0;
+  int iblock=0, nblocks=1024;
+  int stayon=1;
+  struct timespec time_start, time_end, res;
+
+  if(id==0) id=fa125ID[0];
+
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nblocks_erased=0;
+      fa125FWstats.erase_time.tv_sec  = 0;
+      fa125FWstats.erase_time.tv_nsec = 0;
+    }
+
+  printf("** Erasing Main Memory **\n");
+  for(iblock=0; iblock<nblocks; iblock++)
+    {
+      if((iblock%0x10)==0) 
+	{
+	  printf(".");
+	  fflush(stdout);
+	}
+  
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  clock_gettime(CLOCK_MONOTONIC, &time_start);
+	}
+
+#ifdef SKIP
+      // FIXME: I dont think we need this anymore
+      if(iblock==(nblocks-1))
+	{
+	  if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
+	    {
+	      printf("\n%s: Block erase failed\n",__FUNCTION__);
+	      return ERROR;
+	    }
+	  stayon=0;
+	}
+#endif
+
+      /* Perform a block erase */
+      if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
+	{
+	  printf("\n%s: Block erase failed\n",__FUNCTION__);
+	  return ERROR;
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  fa125FWstats.nblocks_erased++;
+	  clock_gettime(CLOCK_MONOTONIC, &time_end);
+	  res = tsSubtract(time_end, time_start);
+	  fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
+	}
+
+    }
+  printf("\n");
+  fflush(stdout);
+
+  taskDelay(3);
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_VERIFY_ERASE)
+    {
+      stayon=1;
+      printf("** Verify erase **\n");
+      for(iblock=0; iblock<nblocks; iblock++)
+	{
+	  if((iblock%0x10)==0) 
+	    {
+	      printf(".");
+	      fflush(stdout);
+	    }
+  
+	  for(ipage=iblock*8; ipage<8*(iblock+1); ipage++)
+	    {
+
+	      /* Read a page from main memory */
+	      if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
+		{
+		  vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+		  printf("\n%s: Error reading from main memory (page = %d)\n",
+			 __FUNCTION__,ipage);
+		  return ERROR;
+		}
+	  
+	      /* Verify the page was erased */
+	      if(fa125FirmwareVerifyErasedPage(ipage)!=OK)
+		{
+		  printf("\n%s: Block erase failed to erase block %d (page %d)\n",
+			 __FUNCTION__,iblock,ipage);
+		  return ERROR;
+		}
+	    }
+	}
+      printf("\n");
+      fflush(stdout);
+    }
+
+  return OK;
+
+}
+
+int
+fa125FirmwareGEraseFull()
+{
+  int ipage=0;
+  int iblock=0, nblocks=1024;
+  int stayon=1;
+  struct timespec time_start, time_end, res;
+  int id=0, ifa=0;
+  
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nblocks_erased=0;
+      fa125FWstats.erase_time.tv_sec  = 0;
+      fa125FWstats.erase_time.tv_nsec = 0;
+    }
+
+  printf("** Erasing Main Memory **\n");
+  printf("All: ");
+  fflush(stdout);
+
+  for(iblock=0; iblock<nblocks; iblock++)
+    {
+      for(ifa=0; ifa<nfa125; ifa++)
+	{
+	  id = fa125Slot(ifa);
+
+	  if(((iblock%0x10)==0) & (ifa==0))
+	    {
+	      printf(".");
+	      fflush(stdout);
+	    }
+
+	  if((iblock!=0) && (ifa==0))
+	    {
+	      /* Wait for the previous block on first module to complete */
+	      taskDelay(7);
+	    }
+
+	  if(iblock!=0)
+	    {
+	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+		{
+		  fa125FWstats.nblocks_erased++;
+		  clock_gettime(CLOCK_MONOTONIC, &time_end);
+		  res = tsSubtract(time_end, time_start);
+		  fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
+		}
+	    }
+	  
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      clock_gettime(CLOCK_MONOTONIC, &time_start);
+	    }
+
+	  /* Perform a block erase */
+	  if(fa125FirmwareBlockErase(id,iblock,stayon,0)!=OK)
+	    {
+	      printf("\n%s: Slot %d: Block erase failed to begin\n",
+		     __FUNCTION__,id);
+	      return ERROR;
+	    }
+
+	} /* nfa125 */
+    } /* nblocks */
+      
+
+  printf("\n");
+  fflush(stdout);
+
+  /* Wait for last block erase to complete */
+  taskDelay(7);
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nblocks_erased++;
+      clock_gettime(CLOCK_MONOTONIC, &time_end);
+      res = tsSubtract(time_end, time_start);
+      fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
+    }
+  
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_VERIFY_ERASE)
+      {
+	stayon=1;
+	printf("** Verify erase **\n");
+	for(ifa=0; ifa<nfa125; ifa++)
+	  {
+	    id = fa125Slot(ifa);
+	    
+	    printf("%3d: ",id);
+	    fflush(stdout);
+
+	    for(iblock=0; iblock<nblocks; iblock++)
+	      {
+		if((iblock%0x10)==0)
+		  {
+		    printf(".");
+		    fflush(stdout);
+		  }
+	      
+		for(ipage=iblock*8; ipage<8*(iblock+1); ipage++)
+		  {
+		  
+		    /* Read a page from main memory */
+		    if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
+		      {
+			vmeWrite32(&fa125p[id]->main.configAdrData, 0);
+			printf("\n%s: Slot %d: Error reading from main memory (page = %d)\n",
+			       __FUNCTION__,id,ipage);
+			return ERROR;
+		      }
+		  
+		    /* Verify the page with that read from the file */
+		    if(fa125FirmwareVerifyErasedPage(ipage)!=OK)
+		      {
+			printf("\n%s: Slot %d: Block erase failed to erase block %d (page %d)\n",
+			       __FUNCTION__,id, iblock,ipage);
+			return ERROR;
+		      }
+		  }
+	      } /* nblocks */
+	    printf("\n");
+	  } /* nfa125 */
+
+	fflush(stdout);
+      }
+
+  return OK;
+
+}
+
+int
+fa125FirmwareWriteFull(int id)
+{
+  int ipage=0;
+  struct timespec time_start, time_end, res;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nbuffers_written          = 0;
+      fa125FWstats.buffer_write_time.tv_sec  = 0;
+      fa125FWstats.buffer_write_time.tv_nsec = 0;
+
+      fa125FWstats.nbuffers_pushed          = 0;
+      fa125FWstats.buffer_push_time.tv_sec  = 0;
+      fa125FWstats.buffer_push_time.tv_nsec = 0;
+    }
+
+  printf("** Writing file to memory **\n");
+  for(ipage=0; ipage<=MCS_pageSize; ipage++)
+    {
+      if((ipage%(8*0x10))==0)
+	{
+	  printf(".");
+	  fflush(stdout);
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  clock_gettime(CLOCK_MONOTONIC, &time_start);
+	}
+      if(fa125FirmwareWriteToBuffer(id, ipage)!=OK)
+	{
+	  printf("\n%s: Error writing to buffer\n",__FUNCTION__);
+	  return ERROR;
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  fa125FWstats.nbuffers_written++;
+	  clock_gettime(CLOCK_MONOTONIC, &time_end);
+	  res = tsSubtract(time_end, time_start);
+	  fa125FWstats.buffer_write_time = tsAdd(fa125FWstats.buffer_write_time, res);
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_WRITE_BUFFER)
+	{
+	  if(fa125FirmwareReadBuffer(id)!=OK)
+	    {
+	      printf("\n%s: Error reading from buffer\n",__FUNCTION__);
+	      return ERROR;
+	    }
+
+	  if(fa125FirmwareVerifyPage(ipage)!=OK)
+	    {
+	      printf("\n%s: ERROR in verifying page %d\n",
+		     __FUNCTION__,ipage);
+	      return ERROR;
+	    }
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  clock_gettime(CLOCK_MONOTONIC, &time_start);
+	}
+      if(fa125FirmwarePushBufferToMain(id, ipage, 1)!=OK)
+	{
+	  printf("\n%s: Error in pushing buffer to main memory (page = %d)\n",
+		 __FUNCTION__,ipage);
+	  return ERROR;
+	}
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  fa125FWstats.nbuffers_pushed++;
+	  clock_gettime(CLOCK_MONOTONIC, &time_end);
+	  res = tsSubtract(time_end, time_start);
+	  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
+	}
+    }
+  
+  printf("\n");
+  fflush(stdout);
+
+  printf("** Verifying Main Memory **\n");
+  if(fa125FirmwareVerifyFull(id)!=OK)
+    {
+      printf("\n%s: Error in verifying full firmware\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+  
+  return OK;
+}
+
+int
+fa125FirmwareGWriteFull()
+{
+  int id=0, ifa=0;
+  int ipage=0;
+  struct timespec time_start, time_end, res;
+
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+    {
+      fa125FWstats.nbuffers_written          = 0;
+      fa125FWstats.buffer_write_time.tv_sec  = 0;
+      fa125FWstats.buffer_write_time.tv_nsec = 0;
+
+      fa125FWstats.nbuffers_pushed          = 0;
+      fa125FWstats.buffer_push_time.tv_sec  = 0;
+      fa125FWstats.buffer_push_time.tv_nsec = 0;
+    }
+
+  printf("** Writing file to memory **\n");
+  printf("All: ");
+  fflush(stdout);
+
+  for(ipage=0; ipage<=MCS_pageSize; ipage++)
+    {
+      for(ifa=0; ifa<nfa125; ifa++)
+	{
+	  id = fa125Slot(ifa);
+	  
+	  if(((ipage%(8*0x10))==0) && (ifa==0))
+	    {
+	      printf(".");
+	      fflush(stdout);
+	    }
+
+	  if(ipage!=0)
+	    {
+	      if(fa125FirmwareWaitForPushBufferToMain(id, ipage-1)!=OK)
+		{
+		  printf("\n%s: Slot %d: Failed to push buffer to main (page %d)\n",
+			 __FUNCTION__,id,ipage-1);
+		  return ERROR;
+		}
+
+	      /* Wait for the previous page push to complete */
+	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+		{
+		  fa125FWstats.nbuffers_pushed++;
+		  clock_gettime(CLOCK_MONOTONIC, &time_end);
+		  res = tsSubtract(time_end, time_start);
+		  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
+		}
+	    }
+
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      clock_gettime(CLOCK_MONOTONIC, &time_start);
+	    }
+
+	  /* Write page to buffer */
+	  if(fa125FirmwareWriteToBuffer(id, ipage)!=OK)
+	    {
+	      printf("\n%s: Error writing to buffer\n",__FUNCTION__);
+	      return ERROR;
+	    }
+
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      fa125FWstats.nbuffers_written++;
+	      clock_gettime(CLOCK_MONOTONIC, &time_end);
+	      res = tsSubtract(time_end, time_start);
+	      fa125FWstats.buffer_write_time = tsAdd(fa125FWstats.buffer_write_time, res);
+	    }
+
+	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	    {
+	      clock_gettime(CLOCK_MONOTONIC, &time_start);
+	    }
+
+	  /* Push buffer to main */
+	  if(fa125FirmwarePushBufferToMain(id, ipage, 0)!=OK)
+	    {
+	      printf("\n%s: Error in pushing buffer to main memory (page = %d)\n",
+		     __FUNCTION__,ipage);
+	      return ERROR;
+	    }
+
+	} /* nfa125 */
+    } /* MCS_pageSize */
+
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      /* Wait for last page push to complete */
+      if(fa125FirmwareWaitForPushBufferToMain(id, MCS_pageSize-1)!=OK)
+	{
+	  printf("\n%s: Slot %d: Failed to push buffer to main (page %d)\n",
+		 __FUNCTION__,id,ipage-1);
+	  return ERROR;
+	}
+
+      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
+	{
+	  fa125FWstats.nbuffers_pushed++;
+	  clock_gettime(CLOCK_MONOTONIC, &time_end);
+	  res = tsSubtract(time_end, time_start);
+	  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
+	}
+      
+    } /* nfa125 */
+  
+  printf("\n");
+  fflush(stdout);
+
+  printf("** Verifying Main Memory **\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      if(fa125FirmwareVerifyFull(id)!=OK)
+	{
+	  printf("\n%s: Slot %d: Error in verifying full firmware\n",
+		 __FUNCTION__,id);
+	  return ERROR;
+	}
+    }
+  
+  return OK;
+}
+
+void
+fa125FirmwarePrintTimes()
+{
+  double erase, write, push, read;
+
+  erase = fa125FWstats.erase_time.tv_sec 
+    + (double)fa125FWstats.erase_time.tv_nsec*1e-9;
+  write = fa125FWstats.buffer_write_time.tv_sec 
+    + (double)fa125FWstats.buffer_write_time.tv_nsec*1e-9;
+  push  = fa125FWstats.buffer_push_time.tv_sec 
+    + (double)fa125FWstats.buffer_push_time.tv_nsec*1e-9;
+  read  = fa125FWstats.main_page_read_time.tv_sec 
+    + (double)fa125FWstats.main_page_read_time.tv_nsec*1e-9;
+
+  printf("\n");
+
+  printf(" Blocks Erased  = %d\n",
+	 fa125FWstats.nblocks_erased);
+  printf(" Erase time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+	 fa125FWstats.erase_time.tv_sec,
+	 fa125FWstats.erase_time.tv_nsec,
+	 erase);
+  printf("\n");
+
+  printf(" Pages written  = %d\n",
+	 fa125FWstats.nbuffers_written);
+  printf(" Write time   %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+	 fa125FWstats.buffer_write_time.tv_sec,
+	 fa125FWstats.buffer_write_time.tv_nsec,
+	 write);
+  printf("\n");
+
+  printf(" Pages pushed   = %d\n",
+	 fa125FWstats.nbuffers_pushed);
+  printf(" Push time    %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+	 fa125FWstats.buffer_push_time.tv_sec,
+	 fa125FWstats.buffer_push_time.tv_nsec,
+	 push);
+  printf("\n");
+  
+
+  printf(" Pages verified = %d  (per module)\n",
+	 fa125FWstats.npages_read);
+  printf(" Read time    %5ld (sec)  %10ld (ns)  = %lf (sec)\n",
+	 fa125FWstats.main_page_read_time.tv_sec,
+	 fa125FWstats.main_page_read_time.tv_nsec,
+	 read);
+  printf("\n");
+
 
 }
