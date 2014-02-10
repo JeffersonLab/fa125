@@ -97,9 +97,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0xaaaa0001
-#define FA125_PROC_SUPPORTED_FIRMWARE   0xaaaa0001
-#define FA125_FE_SUPPORTED_FIRMWARE     0xaaaa0001
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00000001
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00000000
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00000000
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -252,6 +252,19 @@ typedef enum
     FA125_FIRMWARE_DEBUG_VERIFY_ERASE      = (1<<4),
     FA125_FIRMWARE_DEBUG_MEASURE_TIMES     = (1<<5)
   } FA125_FIRMWARE_DEBUG_FLAGS;
+
+/* fa125Init initialization flag bits */
+#define FA125_INIT_VXS_TRIG            (0<<1)
+#define FA125_INIT_INT_TIMER_TRIG      (1<<1)
+#define FA125_INIT_INT_SUM_TRIG        (1<<2)
+#define FA125_INIT_P2_TRIG             ((1<<1) | (1<<2))
+#define FA125_INIT_P2_CLKSRC           (0<<4)
+#define FA125_INIT_VXS_CLKSRC          (1<<4)
+#define FA125_INIT_INT_CLKSRC          (1<<5)
+#define FA125_INIT_SKIP                (1<<16)
+#define FA125_INIT_USE_ADDRLIST        (1<<17)
+#define FA125_INIT_SKIP_FIRMWARE_CHECK (1<<18)
+
 
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id);

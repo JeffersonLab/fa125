@@ -98,6 +98,11 @@ int fa125BlockError=0;       /* Whether (1) or not (0) Block Transfer had an err
  *           for VME addresses.
  *          0: Initialize with addr and addr_inc
  *          1: Use fa125AddrList 
+ *
+ *     18:  Skip firmware check.  Useful for firmware updating.
+ *             0 Perform firmware check
+ *             1 Skip firmware check
+ *
  */
 
 int
@@ -107,7 +112,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   volatile unsigned int rdata=0;
   unsigned int laddr=0, a32addr=0;
   volatile struct fa125_a24 *fa125;
-  int useList=0, noBoardInit=0;
+  int useList=0, noBoardInit=0, noFirmwareCheck=0;;
   int nfind=0, islot=0, FA_SLOT=0, ii=0;
   int trigSrc=0, clkSrc=0, srSrc=0;
   unsigned int boardID=0, fw_version=0;
@@ -120,15 +125,22 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   memset((char *)fa125dacOffset,0,sizeof(fa125dacOffset));
 
   /* Check if we're skipping initialization, and just mapping the structure pointer */
-  if(iFlag & (1<<16))
+  if(iFlag & FA125_INIT_SKIP)
     noBoardInit=1;
 
   /* Check if we're initializing using a list */
-  if(iFlag & (1<<17))
+  if(iFlag & FA125_INIT_USE_ADDRLIST)
     {
       useList=1;
       nfind = nadc;
     }
+
+  /* Are we skipping the firmware check? */
+  if(iFlag & FA125_INIT_SKIP_FIRMWARE_CHECK)
+    {
+      noFirmwareCheck=1;
+    }
+
 
   /* Check for valid address */
   if((addr==0) && (useList==0))
@@ -225,7 +237,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 #endif
       if(res < 0) 
 	{
-	  printf("%s: ERROR: No addressable board at addr=0x%x\n",
+	  printf("%s: WARN: No addressable board at addr=0x%x\n",
 		 __FUNCTION__,(UINT32) fa125AddrList[islot]);
 	}
       else 
@@ -254,31 +266,55 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
 
 	      /* Check the Firmware Versions */
-	      /* MAIN */
-	      fw_version = vmeRead32(&fa125->main.version);
-	      if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
+	      if(noFirmwareCheck)
 		{
-		  printf("%s: ERROR: For module at 0x%x, Unsupported MAIN firmware version 0x%x\n",
-			 __FUNCTION__,fa125AddrList[islot],fw_version);
-/* 		  continue; */
+		  printf("%s: INFO: Firmware Check Disabled\n",
+			 __FUNCTION__);
 		}
-
-	      /* PROC */
-	      fw_version = vmeRead32(&fa125->proc.version);
-	      if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
+	      else
 		{
-		  printf("%s: ERROR: For module at 0x%x, Unsupported PROC firmware version 0x%x\n",
-			 __FUNCTION__,fa125AddrList[islot],fw_version);
-/* 		  continue; */
-		}
+		  int fw_error=0;
+		  /* MAIN */
+		  fw_version = vmeRead32(&fa125->main.version);
+		  if(fw_version==0xffffffff)
+		    { /* buggy firmware.. re-read */
+		      fw_version = vmeRead32(&fa125->main.version);
+		    }
+		  if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
+		    {
+		      printf("%s: ERROR: For module at 0x%x, Unsupported MAIN firmware version 0x%x\n",
+			     __FUNCTION__,fa125AddrList[islot],fw_version);
+		      fw_error=1;
+		    }
 
-	      /* FE - just check the first one */
-	      fw_version = vmeRead32(&fa125->fe[0].version);
-	      if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
-		{
-		  printf("%s: ERROR: For module at 0x%x, Unsupported FE firmware version 0x%x\n",
-			 __FUNCTION__,fa125AddrList[islot],fw_version);
-/* 		  continue; */
+		  /* PROC */
+		  fw_version = vmeRead32(&fa125->proc.version);
+		  if(fw_version==0xffffffff)
+		    { /* buggy firmware.. re-read */
+		      fw_version = vmeRead32(&fa125->proc.version);
+		    }
+		  if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
+		    {
+		      printf("%s: ERROR: For module at 0x%x, Unsupported PROC firmware version 0x%x\n",
+			     __FUNCTION__,fa125AddrList[islot],fw_version);
+		      fw_error=1;
+		    }
+
+		  /* FE - just check the first one */
+		  fw_version = vmeRead32(&fa125->fe[0].version);
+		  if(fw_version==0xffffffff)
+		    { /* buggy firmware.. re-read */
+		      fw_version = vmeRead32(&fa125->fe[0].version);
+		    }
+		  if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
+		    {
+		      printf("%s: ERROR: For module at 0x%x, Unsupported FE firmware version 0x%x\n",
+			     __FUNCTION__,fa125AddrList[islot],fw_version);
+		      fw_error=1;
+		    }
+
+		  if(fw_error)
+		    continue;
 		}
 
 	      /* Get the Geographic Address */
