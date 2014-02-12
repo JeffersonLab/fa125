@@ -265,6 +265,15 @@ typedef enum
 #define FA125_INIT_USE_ADDRLIST        (1<<17)
 #define FA125_INIT_SKIP_FIRMWARE_CHECK (1<<18)
 
+typedef enum
+  {
+    FA125_FIRMWARE_ERROR_ERASE            = (1<<0),
+    FA125_FIRMWARE_ERROR_VERIFY_ERASE     = (1<<1),
+    FA125_FIRMWARE_ERROR_WRITE            = (1<<2),
+    FA125_FIRMWARE_ERROR_PUSH             = (1<<3),
+    FA125_FIRMWARE_ERROR_PUSH_WAIT        = (1<<4),
+    FA125_FIRMWARE_ERROR_VERIFY_WRITE     = (1<<5)
+  } FA125_FIRMWARE_ERROR_FLAGS;
 
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id);
@@ -309,4 +318,5 @@ int  fa125FirmwareGEraseFull();
 int  fa125FirmwareWriteFull(int id);
 int  fa125FirmwareGWriteFull();
 void fa125FirmwarePrintTimes();
+int  fa125FirmwareGCheckErrors();
 #endif /* __FA125LIB__ */

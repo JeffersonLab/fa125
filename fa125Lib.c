@@ -2245,6 +2245,7 @@ static unsigned char  MCS_DATA[FA125_FIRMWARE_MAX_PAGES][FA125_FIRMWARE_MAX_BYTE
 static int            MCS_loaded = 0;             /* 1(0) if firmware loaded (not loaded) */
 static unsigned char  tmp_pageData[FA125_FIRMWARE_MAX_BYTE_PER_PAGE];
 static int            fa125FirmwareDebug=0;
+static int            fa125FirmwareErrorFlags[(FA125_MAX_BOARDS+1)]; /* Firmware Updating Error Flags for each slot */
 enum   ifpgatype      {MAIN, FE, PROC, NFPGATYPE};
 struct fpga_fw_info 
 {
@@ -3150,6 +3151,7 @@ fa125FirmwareGEraseFull()
   int stayon=1;
   struct timespec time_start, time_end, res;
   int id=0, ifa=0;
+  int nerrors=0;
   
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
@@ -3157,6 +3159,8 @@ fa125FirmwareGEraseFull()
       fa125FWstats.erase_time.tv_sec  = 0;
       fa125FWstats.erase_time.tv_nsec = 0;
     }
+
+  memset((char *)fa125FirmwareErrorFlags, 0, sizeof(fa125FirmwareErrorFlags));
 
   printf("** Erasing Main Memory **\n");
   printf("All: ");
@@ -3180,6 +3184,9 @@ fa125FirmwareGEraseFull()
 	      taskDelay(7);
 	    }
 
+	  if(fa125FirmwareErrorFlags[id]!=0) 
+	    continue;
+
 	  if(iblock!=0)
 	    {
 	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
@@ -3201,7 +3208,8 @@ fa125FirmwareGEraseFull()
 	    {
 	      printf("\n%s: Slot %d: Block erase failed to begin\n",
 		     __FUNCTION__,id);
-	      return ERROR;
+	      fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_ERASE;
+/* 	      return ERROR; */
 	    }
 
 	} /* nfa125 */
@@ -3230,6 +3238,9 @@ fa125FirmwareGEraseFull()
 	  {
 	    id = fa125Slot(ifa);
 	    
+	    if(fa125FirmwareErrorFlags[id]!=0) 
+	      continue;
+
 	    printf("%3d: ",id);
 	    fflush(stdout);
 
@@ -3241,16 +3252,23 @@ fa125FirmwareGEraseFull()
 		    fflush(stdout);
 		  }
 	      
+		if(fa125FirmwareErrorFlags[id]!=0) 
+		  break;
+
 		for(ipage=iblock*8; ipage<8*(iblock+1); ipage++)
 		  {
 		  
+		    if(fa125FirmwareErrorFlags[id]!=0) 
+		      break;
+
 		    /* Read a page from main memory */
 		    if(fa125FirmwareReadMainPage(id, ipage, stayon)!=OK)
 		      {
 			vmeWrite32(&fa125p[id]->main.configAdrData, 0);
 			printf("\n%s: Slot %d: Error reading from main memory (page = %d)\n",
 			       __FUNCTION__,id,ipage);
-			return ERROR;
+			fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_VERIFY_ERASE;
+/* 			return ERROR; */
 		      }
 		  
 		    /* Verify the page with that read from the file */
@@ -3258,7 +3276,8 @@ fa125FirmwareGEraseFull()
 		      {
 			printf("\n%s: Slot %d: Block erase failed to erase block %d (page %d)\n",
 			       __FUNCTION__,id, iblock,ipage);
-			return ERROR;
+			fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_VERIFY_ERASE;
+/* 			return ERROR; */
 		      }
 		  }
 	      } /* nblocks */
@@ -3267,6 +3286,18 @@ fa125FirmwareGEraseFull()
 
 	fflush(stdout);
       }
+
+  /* Count how many modules had errors */
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      if(fa125FirmwareErrorFlags[id]!=0)
+	nerrors++;
+    }
+
+  /* Return ERROR if all modules had errors, otherwise we can continue */
+  if(nerrors==nfa125)
+    return ERROR;
 
   return OK;
 
@@ -3415,13 +3446,17 @@ fa125FirmwareGWriteFull()
 	      fflush(stdout);
 	    }
 
+	  if(fa125FirmwareErrorFlags[id]!=0) 
+	    continue;
+
 	  if(ipage!=0)
 	    {
 	      if(fa125FirmwareWaitForPushBufferToMain(id, ipage-1)!=OK)
 		{
 		  printf("\n%s: Slot %d: Failed to push buffer to main (page %d)\n",
 			 __FUNCTION__,id,ipage-1);
-		  return ERROR;
+		  fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_PUSH_WAIT;
+/* 		  return ERROR; */
 		}
 
 	      /* Wait for the previous page push to complete */
@@ -3442,8 +3477,9 @@ fa125FirmwareGWriteFull()
 	  /* Write page to buffer */
 	  if(fa125FirmwareWriteToBuffer(id, ipage)!=OK)
 	    {
-	      printf("\n%s: Error writing to buffer\n",__FUNCTION__);
-	      return ERROR;
+	      printf("\n%s: Slot %d: Error writing to buffer\n",__FUNCTION__,id);
+	      fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_WRITE;
+/* 	      return ERROR; */
 	    }
 
 	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
@@ -3464,7 +3500,8 @@ fa125FirmwareGWriteFull()
 	    {
 	      printf("\n%s: Error in pushing buffer to main memory (page = %d)\n",
 		     __FUNCTION__,ipage);
-	      return ERROR;
+	      fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_PUSH;
+/* 	      return ERROR; */
 	    }
 
 	} /* nfa125 */
@@ -3474,12 +3511,16 @@ fa125FirmwareGWriteFull()
     {
       id = fa125Slot(ifa);
 
+      if(fa125FirmwareErrorFlags[id]!=0) 
+	continue;
+
       /* Wait for last page push to complete */
       if(fa125FirmwareWaitForPushBufferToMain(id, MCS_pageSize-1)!=OK)
 	{
 	  printf("\n%s: Slot %d: Failed to push buffer to main (page %d)\n",
 		 __FUNCTION__,id,ipage-1);
-	  return ERROR;
+	  fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_PUSH_WAIT;
+/* 	  return ERROR; */
 	}
 
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
@@ -3500,11 +3541,15 @@ fa125FirmwareGWriteFull()
     {
       id = fa125Slot(ifa);
 
+      if(fa125FirmwareErrorFlags[id]!=0) 
+	continue;
+
       if(fa125FirmwareVerifyFull(id)!=OK)
 	{
 	  printf("\n%s: Slot %d: Error in verifying full firmware\n",
 		 __FUNCTION__,id);
-	  return ERROR;
+	  fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_VERIFY_WRITE;
+/* 	  return ERROR; */
 	}
     }
   
@@ -3559,6 +3604,64 @@ fa125FirmwarePrintTimes()
 	 fa125FWstats.main_page_read_time.tv_nsec,
 	 read);
   printf("\n");
+}
 
+int
+fa125FirmwareGCheckErrors()
+{
+  int ifa=0, id=0;
+  int rval=OK;
 
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      printf("%3d: ",id);
+      fflush(stdout);
+
+      if(fa125FirmwareErrorFlags[id] == 0)
+	{
+	  printf(" OK!\n");
+	  continue;
+	}
+
+      if(fa125FirmwareErrorFlags[id] & FA125_FIRMWARE_ERROR_ERASE)
+	{
+	  printf(" ERROR on Erasing Main Memory\n");
+	  rval=ERROR;
+	}
+
+      if(fa125FirmwareErrorFlags[id] & FA125_FIRMWARE_ERROR_VERIFY_ERASE)
+	{
+	  printf(" ERROR on Verifying Erased Main Memory\n");
+	  rval=ERROR;
+	}
+
+      if(fa125FirmwareErrorFlags[id] & FA125_FIRMWARE_ERROR_WRITE)
+	{
+	  printf(" ERROR on Writing to Buffer\n");
+	  rval=ERROR;
+	}
+
+      if(fa125FirmwareErrorFlags[id] & FA125_FIRMWARE_ERROR_PUSH)
+	{
+	  printf(" ERROR on Pushing Buffer to Main Memory\n");
+	  rval=ERROR;
+	}
+
+      if(fa125FirmwareErrorFlags[id] & FA125_FIRMWARE_ERROR_PUSH_WAIT)
+	{
+	  printf(" ERROR on Waiting to Push Buffer to Main Memory\n");
+	  rval=ERROR;
+	}
+
+      if(fa125FirmwareErrorFlags[id] & FA125_FIRMWARE_ERROR_VERIFY_WRITE)
+	{
+	  printf(" ERROR on Verifying Firmware in Main Memory\n");
+	  rval=ERROR;
+	}
+
+    }
+
+  return rval;
 }
