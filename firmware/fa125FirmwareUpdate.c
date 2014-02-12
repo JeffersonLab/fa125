@@ -86,18 +86,19 @@ main(int argc, char *argv[]) {
 	goto CLOSE;
       }
 
-/*     fa125FirmwareVerifyFull(0); */
     fa125FirmwareSetDebug(FA125_FIRMWARE_DEBUG_MEASURE_TIMES |
 			  FA125_FIRMWARE_DEBUG_VERIFY_ERASE);
-/*     fa125FirmwareEraseFull(0); */
-/*     fa125FirmwareWriteFull(0); */
-    fa125FirmwareGEraseFull();
-    fa125FirmwareGWriteFull();
-    fa125FirmwarePrintTimes();
-    goto CLOSE;
+
+    if(fa125FirmwareEraseFull(0)!=OK)
+      goto CLOSE;
+
+    if(fa125FirmwareWriteFull(0)!=OK)
+      goto CLOSE;
+
 
  CLOSE:
 
+    fa125FirmwarePrintTimes();
 
     status = vmeCloseDefaultWindows();
     if (status != GEF_SUCCESS)

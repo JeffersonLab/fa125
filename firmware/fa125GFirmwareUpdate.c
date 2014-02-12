@@ -94,14 +94,21 @@ main(int argc, char *argv[]) {
 	goto CLOSE;
       }
 
+    fa125FirmwareSetDebug(FA125_FIRMWARE_DEBUG_MEASURE_TIMES |
+			  FA125_FIRMWARE_DEBUG_VERIFY_ERASE);
+
     if(fa125FirmwareGEraseFull()!=OK)
       goto CLOSE;
     if(fa125FirmwareGWriteFull()!=OK)
       goto CLOSE;
-    fa125FirmwarePrintTimes();
-    goto CLOSE;
 
  CLOSE:
+
+    printf("**********************************************************************\n");
+    printf("                 fADC125 Firmware Update Summary\n");
+    fa125FirmwareGCheckErrors();
+    fa125FirmwarePrintTimes();
+    printf("**********************************************************************\n");
 
 
     status = vmeCloseDefaultWindows();
