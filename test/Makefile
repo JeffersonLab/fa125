@@ -35,6 +35,9 @@ adc125LibTest.o: adc125LibTest.c
 adc125LibTest2.o: adc125LibTest2.c
 	$(CC) -c $(CFLAGS) $(INCS) -o $@ $<
 
+fa125ReadoutTest_write: fa125ReadoutTest_write.c
+	$(CC) $(CFLAGS) $(INCS) -lsd -lrt -ljvme -lfa125 -lti -lts -o $@ $<
+
 clean distclean:
 	@rm -f $(PROGS) *~ *.so
 
