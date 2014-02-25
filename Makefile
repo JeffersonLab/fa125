@@ -52,8 +52,8 @@ endif
 # Defs and build for Linux
 ifeq ($(ARCH),Linux)
 
-LINUXVME_LIB		?= ${CODA}/extensions/linuxvme/libs
-LINUXVME_INC		?= ${CODA}/extensions/linuxvme/include
+LINUXVME_LIB		?= ${CODA}/linuxvme/lib
+LINUXVME_INC		?= ${CODA}/linuxvme/include
 
 CROSS_COMPILE           = 
 CC			= $(CROSS_COMPILE)gcc

@@ -37,10 +37,10 @@ endif #ARCH=VXWORKSPPC#
 # Defs and build for Linux
 ifeq ($(ARCH),Linux)
 
-LINUXVME_LIB	?= ../../libs
-LINUXVME_INC	?= ../../include
-LINUXVME_BIN	?= ../../bin
-LINUXVME_FW	?= ../../firmware
+LINUXVME_LIB	?= ${CODA}/linuxvme/lib
+LINUXVME_INC	?= ${CODA}/linuxvme/include
+LINUXVME_BIN    ?= ${CODA}/linuxvme/bin
+LINUXVME_FW     ?= ${CODA}/linuxvme/firmware
 
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
@@ -69,6 +69,7 @@ fa125FirmwareUpdate.o: fa125FirmwareUpdate.c
 	@echo "Making $@ for $(ARCH)"
 	$(CC) $(CFLAGS) -c -o $@ $(<)
 else
+
 install: $(PROGS)
 	@echo "Installing $(PROGS)"
 	@install -v -d $(LINUXVME_BIN)
