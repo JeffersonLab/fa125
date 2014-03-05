@@ -139,6 +139,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   if(iFlag & FA125_INIT_SKIP_FIRMWARE_CHECK)
     {
       noFirmwareCheck=1;
+      printf("%s: INFO: Firmware Check Disabled\n",
+	     __FUNCTION__);
     }
 
 
@@ -266,18 +268,14 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
 
 	      /* Check the Firmware Versions */
-	      if(noFirmwareCheck)
-		{
-		  printf("%s: INFO: Firmware Check Disabled\n",
-			 __FUNCTION__);
-		}
-	      else
+	      if(!noFirmwareCheck)
 		{
 		  int fw_error=0;
 		  /* MAIN */
 		  fw_version = vmeRead32(&fa125->main.version);
 		  if(fw_version==0xffffffff)
 		    { /* buggy firmware.. re-read */
+		      printf("%s: bum main read\n",__FUNCTION__);
 		      fw_version = vmeRead32(&fa125->main.version);
 		    }
 		  if(fw_version != FA125_MAIN_SUPPORTED_FIRMWARE)
@@ -291,6 +289,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 		  fw_version = vmeRead32(&fa125->proc.version);
 		  if(fw_version==0xffffffff)
 		    { /* buggy firmware.. re-read */
+		      printf("%s: bum proc read\n",__FUNCTION__);
 		      fw_version = vmeRead32(&fa125->proc.version);
 		    }
 		  if(fw_version != FA125_PROC_SUPPORTED_FIRMWARE)
@@ -304,6 +303,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 		  fw_version = vmeRead32(&fa125->fe[0].version);
 		  if(fw_version==0xffffffff)
 		    { /* buggy firmware.. re-read */
+		      printf("%s: bum FE read\n",__FUNCTION__);
 		      fw_version = vmeRead32(&fa125->fe[0].version);
 		    }
 		  if(fw_version != FA125_FE_SUPPORTED_FIRMWARE)
@@ -2793,6 +2793,38 @@ fa125FirmwareVerifyFull(int id)
 
 }
 
+int
+fa125FirmwareGVerifyFull()
+{
+  int ifa=0, id=0;
+
+  if(MCS_loaded==0)
+    {
+      printf("%s: ERROR: MCS file not loaded into memory\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+
+  printf("** Verifying Main Memory **\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+
+      if(fa125FirmwareErrorFlags[id]!=0) 
+	continue;
+
+      if(fa125FirmwareVerifyFull(id)!=OK)
+	{
+	  printf("\n%s: Slot %d: Error in verifying full firmware\n",
+		 __FUNCTION__,id);
+	  fa125FirmwareErrorFlags[id] |= FA125_FIRMWARE_ERROR_VERIFY_WRITE;
+/* 	  return ERROR; */
+	}
+    }
+
+  return OK;
+}
+
 static int
 fa125FirmwareVerifyPage(int ipage)
 {
@@ -2885,6 +2917,9 @@ fa125FirmwareReadMcsFile(char *filename)
   unsigned int readMCS=0;
   int ichar;
   int ifpga=MAIN; int fpga_bytes=0;
+  unsigned int prev_addr=0xFFF0, addr0=0, addr1=0, addr2=0, addr3=0;
+  unsigned int prev_elar_data=-1, elar_data=0, data0=0, data1=0, data2=0, data3=0;
+  unsigned int mcs_line_number=0;
 
   /* Initialize the local storage array */
   memset((char *)MCS_DATA,0xff,sizeof(MCS_DATA));
@@ -2911,6 +2946,7 @@ fa125FirmwareReadMcsFile(char *filename)
 
   while(!feof(mcsFile))
     {
+      mcs_line_number++;
       /* Get the current line */
       if(!fgets(ihexLine, sizeof(ihexLine), mcsFile))
 	break;
@@ -2935,6 +2971,13 @@ fa125FirmwareReadMcsFile(char *filename)
 
 	  if(strncmp("00",&ihexLine[7], 2) == 0) /* Data Record */
 	    {
+	      /* Get the address */
+	      addr3 = hex2num(ihexLine[3]);
+	      addr2 = hex2num(ihexLine[4]);
+	      addr1 = hex2num(ihexLine[5]);
+	      addr0 = hex2num(ihexLine[6]);
+	      prev_addr = (addr3<<12) | (addr2<<8) | (addr1<<4) | addr0;
+
 	      pData = &ihexLine[9]; /* point to the beginning of the data */
 	      while(datalen--)
 		{
@@ -2959,6 +3002,7 @@ fa125FirmwareReadMcsFile(char *filename)
 		    {
 		      ibyte++;
 		    }
+#ifdef OLDWAY
 		  if(fpga_bytes==sfpga[ifpga].size)
 		    { 
 		      /* End of this FPGA, Skip to the Next */
@@ -2970,9 +3014,34 @@ fa125FirmwareReadMcsFile(char *filename)
 			  fpga_bytes=0;
 			}
 		    }
+#endif
 		  readMCS++;
 		  nbytes++;
 		}
+	    }
+	  else if(strncmp("04",&ihexLine[7], 2) == 0) /* ELAR */
+	    {
+	      /* Get the elar data */
+	      data3 = hex2num(ihexLine[9]);
+	      data2 = hex2num(ihexLine[10]);
+	      data1 = hex2num(ihexLine[11]);
+	      data0 = hex2num(ihexLine[12]);
+	      elar_data = (data3<<12) | (data2<<8) | (data1<<4) | data0;
+
+/* 	      if(prev_addr!=0xFFF0) */
+	      if(elar_data != (prev_elar_data + 1))
+		{
+		  ifpga++;
+		  if(ifpga!=NFPGATYPE) 
+		    {
+		      ipage = sfpga[ifpga].page_location;
+		      ibyte = sfpga[ifpga].page_byte_location;
+		      fpga_bytes=0;
+		    }
+/* 		  printf("%8d: fpga_bytes = %8d ipage = 0x%06x (bytes = 0x%x)\n", */
+/* 			 mcs_line_number,fpga_bytes,ipage, ipage*FA125_FIRMWARE_MAX_BYTE_PER_PAGE); */
+		}
+	      prev_elar_data = elar_data;
 	    }
 	  else if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MCS_SKIPPED_LINES)
 	    {
@@ -2984,7 +3053,7 @@ fa125FirmwareReadMcsFile(char *filename)
       line++;
     }
 
-  MCS_pageSize = ipage;
+  MCS_pageSize = ipage+1;
   MCS_dataSize = readMCS;
   
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MCS_FILE)
