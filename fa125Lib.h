@@ -313,6 +313,7 @@ void fa125DecodeData(unsigned int data);
 void fa125FirmwareSetDebug(unsigned int debug);
 int  fa125FirmwareGVerifyFull();
 int  fa125FirmwareReadMcsFile(char *filename);
+void fa125FirmwarePrintFPGAStats();
 void fa125FirmwarePrintPage(int page);
 int  fa125FirmwareEraseFull(int id);
 int  fa125FirmwareGEraseFull();

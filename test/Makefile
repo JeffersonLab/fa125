@@ -24,7 +24,7 @@ RANLIB                  = ranlib
 CFLAGS			= -Wall -g -O2 -I${LINUXVME_INC} -I. -I/usr/include \
 			  -L${LINUXVME_LIB} -L.
 
-PROGS			= adc125LibTest fa125ReadoutTest
+PROGS			= fa125FirmwareTest
 
 
 all: $(PROGS)
@@ -42,6 +42,6 @@ clean distclean:
 	@rm -f $(PROGS) *~ *.so
 
 %: %.c
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125 -lti
+	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125 -lti -lts -lsd -lctp
 
 .PHONY: all clean distclean

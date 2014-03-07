@@ -1,4 +1,4 @@
-/*----------------------------------------------------------------------------*
+ /*----------------------------------------------------------------------------*
  *  Copyright (c) 2010        Southeastern Universities Research Association, *
  *                            Thomas Jefferson National Accelerator Facility  *
  *                                                                            *
@@ -2916,22 +2916,13 @@ fa125FirmwareReadMcsFile(char *filename)
   int ibyte=0, ipage=0;
   unsigned int readMCS=0;
   int ichar;
-  int ifpga=MAIN; int fpga_bytes=0;
-  unsigned int prev_addr=0xFFF0, addr0=0, addr1=0, addr2=0, addr3=0;
+  int ifpga=MAIN, fpga_bytes=0, getFirmwareLocation=0;
+  unsigned int mcs_addr=0xFFF0, addr0=0, addr1=0, addr2=0, addr3=0;
   unsigned int prev_elar_data=-1, elar_data=0, data0=0, data1=0, data2=0, data3=0;
   unsigned int mcs_line_number=0;
 
   /* Initialize the local storage array */
   memset((char *)MCS_DATA,0xff,sizeof(MCS_DATA));
-
-  /* Calculate the page and page_byte locations of the start of the fpga firmware */
-  for(ifpga=MAIN; ifpga<NFPGATYPE; ifpga++)
-    {
-      sfpga[ifpga].page_location = 
-	(unsigned int)(sfpga[ifpga].location/FA125_FIRMWARE_MAX_BYTE_PER_PAGE);
-      sfpga[ifpga].page_byte_location = 
-	(unsigned int)(sfpga[ifpga].location%FA125_FIRMWARE_MAX_BYTE_PER_PAGE);
-    }
 
   mcsFile = fopen(filename,"r");
   if(mcsFile==NULL)
@@ -2976,7 +2967,20 @@ fa125FirmwareReadMcsFile(char *filename)
 	      addr2 = hex2num(ihexLine[4]);
 	      addr1 = hex2num(ihexLine[5]);
 	      addr0 = hex2num(ihexLine[6]);
-	      prev_addr = (addr3<<12) | (addr2<<8) | (addr1<<4) | addr0;
+	      mcs_addr = (elar_data<<16) | (addr3<<12) | (addr2<<8) | (addr1<<4) | addr0;
+
+	      /* Determine the initial page and byte number from this address */
+	      ipage = (int)(mcs_addr / FA125_FIRMWARE_MAX_BYTE_PER_PAGE);
+	      ibyte = (int)(mcs_addr % FA125_FIRMWARE_MAX_BYTE_PER_PAGE);
+
+	      if(getFirmwareLocation==1)
+		{
+		  /* ipage = sfpga[ifpga].page_location; */
+		  /* ibyte = sfpga[ifpga].page_byte_location; */
+		  sfpga[ifpga].page_location = ipage;
+		  sfpga[ifpga].page_byte_location = ibyte;
+		  getFirmwareLocation=0;
+		}
 
 	      pData = &ihexLine[9]; /* point to the beginning of the data */
 	      while(datalen--)
@@ -3031,11 +3035,13 @@ fa125FirmwareReadMcsFile(char *filename)
 /* 	      if(prev_addr!=0xFFF0) */
 	      if(elar_data != (prev_elar_data + 1))
 		{
-		  ifpga++;
 		  if(ifpga!=NFPGATYPE) 
 		    {
-		      ipage = sfpga[ifpga].page_location;
-		      ibyte = sfpga[ifpga].page_byte_location;
+		      sfpga[ifpga].size = fpga_bytes;
+		      ifpga++;
+		      getFirmwareLocation=1;
+		      /* ipage = sfpga[ifpga].page_location; */
+		      /* ibyte = sfpga[ifpga].page_byte_location; */
 		      fpga_bytes=0;
 		    }
 /* 		  printf("%8d: fpga_bytes = %8d ipage = 0x%06x (bytes = 0x%x)\n", */
@@ -3071,8 +3077,24 @@ fa125FirmwareReadMcsFile(char *filename)
 
   MCS_loaded = 1;
 
+  fa125FirmwarePrintFPGAStats();
+
   fclose(mcsFile);
   return OK;
+}
+
+void
+fa125FirmwarePrintFPGAStats()
+{
+  int ifpga=MAIN;
+
+  for(ifpga=MAIN; ifpga<NFPGATYPE; ifpga++)
+    {
+      printf("%s: size = %d   location = 0x%08x\n",
+	     sfpga[ifpga].name, sfpga[ifpga].size, sfpga[ifpga].location);
+    }
+
+
 }
 
 void
