@@ -1750,7 +1750,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 #else
       retVal = vmeDmaSend((UINT32)laddr, vmeAdr, (nwrds<<2));
 #endif
-      if(retVal |= 0) 
+      if(retVal != 0) 
 	{
 	  logMsg("fa125ReadBlock: ERROR in DMA transfer Initialization 0x%x\n",retVal,0,0,0,0,0);
 	  FA125UNLOCK;
