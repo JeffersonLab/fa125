@@ -53,7 +53,7 @@ struct fa125_a24_main
   /* 0x0054 */ volatile UINT32 block_count;
   /* 0x0058 */ volatile UINT32 configCSR;
   /* 0x005C */ volatile UINT32 configAdrData;
-  /* 0x0058 */          UINT32 blank1[(0x1000-0x58)/4];
+  /* 0x0060 */          UINT32 blank1[(0x1000-0x60)/4];
 };
 
 struct fa125_a24_fe 
