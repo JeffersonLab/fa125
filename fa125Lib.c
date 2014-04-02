@@ -78,7 +78,8 @@ int fa125BlockError=0;       /* Whether (1) or not (0) Block Transfer had an err
  *       Low 6 bits - Specifies the default Signal distribution (clock,trigger) 
  *                    sources for the board (Internal, FrontPanel, VXS, VME(Soft))
  *       bit    0:  defines Sync Reset source
- *                    NOT USED WITH THIS FIRMWARE VERSION
+ *                 0  VXS (P0)
+ *                 1  VME (software)
  *       bits 2-1:  defines Trigger source
  *           (0) 0 0  VXS (P0)
  *           (1) 0 1  Internal Timer
@@ -363,7 +364,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
   /* Determine the clock, sync, trigger configuration */
   /* Sync Reset */
-  srSrc = 0;
+  srSrc = (iFlag&0x1);
 
   /* Trigger */
   trigSrc = (iFlag&0x6)>>1;
@@ -392,7 +393,9 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
       /* Set the trigger source */
       fa125SetTriggerSource(FA_SLOT,fa125TriggerSource);
-      
+
+      /* Set the SyncReset source */
+      fa125SetSyncResetSource(FA_SLOT,srSrc);
     }
 
   for(ii=0;ii<nfa125; ii++) 
@@ -511,11 +514,8 @@ fa125Status(int id)
   unsigned int main_slot_ga, main_clock;
   unsigned int main_serial[2], mezz_serial[2];
   unsigned int fe_version;
-  unsigned int proc_version;
-  unsigned int proc_csr;
-  unsigned int proc_trigsrc;
-  unsigned int clksrc;
-  unsigned int trigsrc;
+  unsigned int proc_version, proc_csr, proc_trigsrc, proc_ctrl2;
+  unsigned int clksrc, trigsrc, srsrc;
   unsigned int faBase, a32Base, ambMin, ambMax;
   unsigned int adr32, adr_mb;
   unsigned int ctrl1;
@@ -549,10 +549,15 @@ fa125Status(int id)
   mezz_serial[1] = vmeRead32(&fa125p[id]->main.serial[3]);
 
   fe_version = vmeRead32(&fa125p[id]->fe[0].version);
+  if(fe_version==0xffffffff)
+    {
+      fe_version = vmeRead32(&fa125p[id]->fe[0].version);
+    }
 
   proc_version = vmeRead32(&fa125p[id]->proc.version);
   proc_csr     = vmeRead32(&fa125p[id]->proc.csr);
   proc_trigsrc = vmeRead32(&fa125p[id]->proc.trigsrc);
+  proc_ctrl2   = vmeRead32(&fa125p[id]->proc.ctrl2);
 
   adr32        = vmeRead32(&fa125p[id]->main.adr32);
   adr_mb       = vmeRead32(&fa125p[id]->main.adr_mb);
@@ -690,6 +695,14 @@ fa125Status(int id)
     printf(" Internal Sum\n");
   else if (trigsrc == FA125_TRIGSRC_TRIGGER_P2)
     printf(" P2\n");
+
+  /* SYNCRESET */
+  printf(" SyncReset Source:");
+  srsrc = (proc_ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2;
+  if(srsrc == FA125_PROC_CTRL2_SYNCRESET_P0)
+    printf(" P0\n");
+  else if (srsrc == FA125_PROC_CTRL2_SYNCRESET_VME)
+    printf(" VME (software)\n");
 
   printf("\n");
   if(ctrl1&FA125_CTRL1_ENABLE_BERR)
@@ -1276,6 +1289,46 @@ fa125SetTriggerSource(int id, int trigsrc)
 
   return OK;
 }
+
+int
+fa125SetSyncResetSource(int id, int srsrc)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if((srsrc<0) || (srsrc>1))
+    {
+      printf("%s: ERROR: Invalid SyncReset Source specified (%d)\n",
+	     __FUNCTION__,srsrc);
+      return ERROR;
+    }
+
+  switch(srsrc)
+    {
+    case 1: /* VME (software) */
+      srsrc = FA125_TRIGSRC_TRIGGER_INTERNAL_SUM;
+      break;
+
+    case 0: /* VXS (P0) */
+    default:
+      srsrc = FA125_PROC_CTRL2_SYNCRESET_P0;
+      break;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.ctrl2, 
+	     (vmeRead32(&fa125p[id]->proc.ctrl2) & ~FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK) | 
+	     srsrc);
+  FA125UNLOCK;
+
+  return OK;
+}
+
 
 /*******************************************************************************
  *
