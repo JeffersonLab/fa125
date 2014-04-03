@@ -340,6 +340,9 @@ extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
 
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id, int pflag);
+void fa125GStatus(int pflag);
+int  fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW, 
+		      unsigned int NSB, unsigned int NSA, unsigned int NP);
 int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
@@ -352,6 +355,10 @@ int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
 unsigned short fa125ReadOffset(int id, int chan);
 int  fa125ReadOffsetToFile(int id, char *filename);
+int  fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan);
+int  fa125SetCommonThreshold(int id, unsigned short tvalue);
+void fa125GSetCommonThreshold(unsigned short tvalue);
+int  fa125PrintThreshold(int id);
 int  fa125SetPulserAmplitude(int id, int chan, int dacData);
 int  fa125SetMulThreshold(int id, int dacData);
 int  fa125PrintTemps(int id);

@@ -484,6 +484,41 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 
 }
 
+void
+fa125CheckAddresses(int id)
+{
+  unsigned int offset=0, expected=0, base=0;
+  int ife=0;
+
+  if(id==0) id=fa125ID[0];
+  if((id<=0) || (id>21) || (fa125p[id]==NULL))
+    {
+      printf("%s: ERROR: FA125 in slot %d not initialized\n",__FUNCTION__,id);
+      return;
+    }
+  
+  printf("%s:\n\t ---------- Checking FA125 address space ---------- \n",__FUNCTION__);
+
+  base = (unsigned int) &fa125p[id]->main;
+
+  for(ife=0; ife<12; ife++)
+    {
+      offset = ((unsigned int) &fa125p[id]->fe[ife]) - base;
+      expected = 0x1000 + ife*0x1000;
+      if(offset != expected)
+	printf("%s: ERROR fa125p[%d]->fe[%d] not at offset = 0x%x (@ 0x%x)\n",
+	       __FUNCTION__,id,ife,expected,offset);
+    }
+
+  offset = ((unsigned int) &fa125p[id]->proc) - base;
+  expected = 0xD000;
+  if(offset != expected)
+    printf("%s: ERROR fa125p[%d]->proc not at offset = 0x%x (@ 0x%x)\n",
+	   __FUNCTION__,id,expected,offset);
+
+}
+
+
 /*******************************************************************************
  *
  * fa125Slot - Convert an index into a slot number, where the index is
@@ -563,6 +598,10 @@ fa125Status(int id, int pflag)
   m.blockCSR     = vmeRead32(&fa125p[id]->main.blockCSR);
 
   f[0].config1   = vmeRead32(&fa125p[id]->fe[0].config1);
+  f[0].ptw       = vmeRead32(&fa125p[id]->fe[0].ptw);
+  f[0].pl        = vmeRead32(&fa125p[id]->fe[0].pl);
+  f[0].nsb       = vmeRead32(&fa125p[id]->fe[0].nsb);
+  f[0].nsa       = vmeRead32(&fa125p[id]->fe[0].nsa);
 
   for(i=0; i<12; i++)
     {
@@ -686,24 +725,24 @@ fa125Status(int id, int pflag)
 
   printf("\n");
 
-  printf("   Bus Error %s\n",
+  printf(" Bus Error %s\n",
 	 (m.ctrl1&FA125_CTRL1_ENABLE_BERR)?"ENABLED":"DISABLED");
 
   if(m.ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK)
     {
       if(m.ctrl1&FA125_CTRL1_FIRST_BOARD)
-	printf("   MultiBlock transfer ENABLED (First Board)\n");
+	printf(" MultiBlock transfer ENABLED (First Board)\n");
       else if(m.ctrl1&FA125_CTRL1_LAST_BOARD)
-	printf("   MultiBlock transfer ENABLED (Last Board)\n");
+	printf(" MultiBlock transfer ENABLED (Last Board)\n");
       else
-	printf("   MultiBlock transfer ENABLED\n");
+	printf(" MultiBlock transfer ENABLED\n");
     }
   else
-    printf("   MultiBlock transfer DISABLED\n");
+    printf(" MultiBlock transfer DISABLED\n");
 
   printf("\n");
 
-  printf("\n  Processing Configuration: \n");
+  printf(" Processing Configuration: \n");
     printf("   Mode = %d  (%s)  - %s\n",
 	   (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
 	   fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
@@ -715,6 +754,8 @@ fa125Status(int id, int pflag)
   printf("   Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>5);
   printf("   Playback Mode    = %s \n",
 	 (f[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE)?"ENABLED":"DISABLED");
+
+  printf("\n");
 
   printf(" Block Count = %d\n",m.block_count);
   printf(" Trig  Count = %d\n",p.trig_count);
@@ -786,7 +827,7 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
       return ERROR;
     }
 
-  /* Defaults - FIXME: These need defined */
+  /* Defaults */
   if((PL==0)||(PL>FA125_MAX_PL))  PL  = FA125_DEFAULT_PL;
   if((PTW==0)||(PTW>FA125_MAX_PTW)) PTW = FA125_DEFAULT_PTW;
   if((NSB==0)||(NSB>FA125_MAX_NSB)) NSB = FA125_DEFAULT_NSB;
@@ -2085,7 +2126,6 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 		   vmeRead32(&fa125p[id]->main.ctrl1) & ~FA125_CTRL1_ENABLE_BERR);
 
       dCnt = 0;
-      // FIXME: Double check that endian-ness is correct here.
       /* Read Block Header - should be first word */
       bhead = fa125pd[id]->data; 
 #ifndef VXWORKS
@@ -2156,7 +2196,8 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
   return(OK);
 }
 
-struct data_struct {
+struct data_struct 
+{
   unsigned int new_type;
   unsigned int type;
   unsigned int slot_id_hd;
@@ -2209,6 +2250,8 @@ fa125DecodeData(unsigned int data)
   static unsigned int slot_id_ev_hd = 0;
   static unsigned int slot_id_dnv = 0;
   static unsigned int slot_id_fill = 0;
+
+  static int nsamples=0;
 
   int i_print =1;
   
@@ -2310,6 +2353,7 @@ fa125DecodeData(unsigned int data)
 	      if( i_print ) 
 		printf("%8X - WINDOW RAW DATA - chan = %d   width = %d\n", 
 		       data, fadc_data.chan, fadc_data.width);
+	      nsamples=0;
 	    }    
 	  else
 	    {
@@ -2322,9 +2366,10 @@ fa125DecodeData(unsigned int data)
 	      if( data & 0x2000 )
 		fadc_data.valid_2 = 0;
 	      if( i_print ) 
-		printf("%8X - RAW SAMPLES - valid = %d  adc = %d (%X)  valid = %d  adc = %d (%X)\n", 
-		       data, fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
+		printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %d (%X)  valid = %d  adc = %d (%X)\n", 
+		       data, nsamples,fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
 		       fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
+	      nsamples += 2;
 	    }    
 	  break;
 
@@ -2709,10 +2754,6 @@ fa125FirmwareWriteToBuffer(int id, int ipage)
   /* Configuration csr for buffer write */
   vmeWrite32(&fa125p[id]->main.configCSR, 
 	     FA125_CONFIGCSR_PROG_ENABLE | (FA125_OPCODE_BUFFER_WRITE<<24));
-
-  // FIXME: Do I need this?
-/*   vmeWrite32(&fa125p[id]->main.configAdrData, */
-/* 	     FA125_CONFIGADRDATA_EXEC); */
 
   /* Write configuration data byte using byte addresses 0-527 */
   for(ibadr=0; ibadr<528; ibadr++)
@@ -3399,19 +3440,6 @@ fa125FirmwareEraseFull(int id)
 	{
 	  clock_gettime(CLOCK_MONOTONIC, &time_start);
 	}
-
-#ifdef SKIP
-      // FIXME: I dont think we need this anymore
-      if(iblock==(nblocks-1))
-	{
-	  if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
-	    {
-	      printf("\n%s: Block erase failed\n",__FUNCTION__);
-	      return ERROR;
-	    }
-	  stayon=0;
-	}
-#endif
 
       /* Perform a block erase */
       if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
