@@ -70,7 +70,7 @@ struct fa125_a24_fe
   /* 0xN064 */ volatile UINT32 ptw_max_buf;
   /* 0xN068 */ volatile UINT32 nsb;
   /* 0xN06C */ volatile UINT32 nsa;
-  /* 0xN070 */ volatile UINT32 tet[6];
+  /* 0xN070 */ volatile UINT32 threshold[6];
   /* 0xN088 */ volatile UINT32 config1;
   /* 0xN08C */ volatile UINT32 trig_count;
   /* 0xN090 */          UINT32 blank2[(0x1000-0x90)/4];
@@ -195,8 +195,8 @@ struct fa125_a32
 /* 0x106C FE NSA register defintions */
 #define FA125_FE_NSA_MASK          0x00003FFF
 
-/* 0xN070 - 0xN084 tet register defintions */
-#define FA125_FE_TET_MASK          0x00000FFF
+/* 0xN070 - 0xN084 threshold register defintions */
+#define FA125_FE_THRESHOLD_MASK          0x00000FFF
 
 /* 0x1088 FE config1 defintions */
 #define FA125_FE_CONFIG1_MASK            0x000000FF
@@ -305,6 +305,9 @@ typedef enum
 #define FA125_INIT_USE_ADDRLIST        (1<<17)
 #define FA125_INIT_SKIP_FIRMWARE_CHECK (1<<18)
 
+/* fa125Status flags */
+#define FA125_STATUS_SHOWREGS          (1<<0)
+
 typedef enum
   {
     FA125_FIRMWARE_ERROR_ERASE            = (1<<0),
@@ -315,8 +318,28 @@ typedef enum
     FA125_FIRMWARE_ERROR_VERIFY_WRITE     = (1<<5)
   } FA125_FIRMWARE_ERROR_FLAGS;
 
+/* Default, maximum and minimum ADC Processing parameters */
+#define FA125_DEFAULT_PL     50
+#define FA125_DEFAULT_PTW    50
+#define FA125_DEFAULT_NSB     5
+#define FA125_DEFAULT_NSA    10
+#define FA125_DEFAULT_NP      3
+
+#define FA125_MAX_PL       1000
+#define FA125_MAX_PTW       512
+#define FA125_MAX_NSB       500
+#define FA125_MAX_NSA       500
+#define FA125_MAX_NP          3
+
+/* Processing Modes */
+#define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW
+#define FA125_SUPPORTED_NMODES 1
+#define FA125_PROC_MODE_RAWWINDOW  1
+
+extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
+
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
-int  fa125Status(int id);
+int  fa125Status(int id, int pflag);
 int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
