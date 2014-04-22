@@ -1553,6 +1553,9 @@ fa125SetSyncResetSource(int id, int srsrc)
   vmeWrite32(&fa125p[id]->proc.ctrl2, 
 	     (vmeRead32(&fa125p[id]->proc.ctrl2) & ~FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK) | 
 	     srsrc);
+  vmeWrite32(&fa125p[id]->fe[0].test,
+	     (vmeRead32(&fa125p[id]->fe[0].test) & ~(1<<2)) |
+	     (1<<2));
   FA125UNLOCK;
 
   return OK;

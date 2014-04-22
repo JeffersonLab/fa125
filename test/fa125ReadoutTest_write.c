@@ -101,6 +101,8 @@ main(int argc, char *argv[])
 
   tiSetPrescale(0);
   tiSetBlockLevel(1);
+  tiSetBlockLimit(3);
+
 
   stat = tiIntConnect(TI_INT_VEC, myISR, 0);
   if (stat != OK) 
@@ -177,8 +179,6 @@ main(int argc, char *argv[])
   sdSetActiveVmeSlots( fa125ScanMask());
   sdStatus(1);
 
-  getchar();
-
   fa125SetByteSwap(0,0);
   int iadc=0, faslot=0;
   extern int nfa125;
@@ -213,9 +213,10 @@ main(int argc, char *argv[])
     }
 
   fa125ResetToken(0);
+  tiSyncReset(1);
 
   printf("Hit any key to enable Triggers...\n");
-  getchar();
+/*   getchar(); */
 
   /* Enable the TI and clear the trigger counter */
   tiIntEnable(0);
@@ -370,7 +371,7 @@ myISR(int arg)
     {
       faslot = fa125Slot(iadc);
 /*       fa125SoftTrigger(faslot); */
-      sleep(1);
+/*       sleep(1); */
     
 #ifdef OLDREADOUT
       iread=0;
