@@ -207,7 +207,7 @@ main(int argc, char *argv[])
       fa125SetBlocklevel(faslot, 1);
 
       fa125Reset(faslot, 0);
-      fa125SetProcMode(faslot,1,100,20,0,0,0);
+      fa125SetProcMode(faslot,1,100,26,0,0,0);
       fa125Enable(faslot);
       fa125Status(faslot,0);
     }
