@@ -64,7 +64,16 @@ struct fa125_a24_fe
   /* 0xN020 */ volatile UINT32 adc_async[6];
   /* 0xN038 */          UINT32 blank1[(0x40-0x38)/4];
   /* 0xN040 */ volatile UINT32 acqfifo[6];
-  /* 0xN058 */          UINT32 blank2[(0x1000-0x58)/4];
+  /* 0xN058 */ volatile UINT32 ptw;
+  /* 0xN05C */ volatile UINT32 pl;
+  /* 0xN060 */ volatile UINT32 ptw_last_adr;
+  /* 0xN064 */ volatile UINT32 ptw_max_buf;
+  /* 0xN068 */ volatile UINT32 nsb;
+  /* 0xN06C */ volatile UINT32 nsa;
+  /* 0xN070 */ volatile UINT32 threshold[6];
+  /* 0xN088 */ volatile UINT32 config1;
+  /* 0xN08C */ volatile UINT32 trig_count;
+  /* 0xN090 */          UINT32 blank2[(0x1000-0x90)/4];
 };
 
 struct fa125_a24_proc 
@@ -97,9 +106,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00000001
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00000000
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00000000
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010101
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010101
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00010101
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -135,9 +144,6 @@ struct fa125_a32
 #define FA125_BLOCKCSR_PULSE_HARD_RESET (1<<9)
 
 /* 0x44 ctrl1 register definitions */
-#define FA125_CTRL1_SYNCRESET_SOURCE_MASK 0x3
-#define FA125_CTRL1_SYNCRESET_P0          (0)
-#define FA125_CTRL1_SYNCRESET_VME         (2)
 #define FA125_CTRL1_ENABLE_BERR           (1<<2)
 #define FA125_CTRL1_ENABLE_MULTIBLOCK     (1<<3)
 #define FA125_CTRL1_FIRST_BOARD           (1<<4)
@@ -171,6 +177,37 @@ struct fa125_a32
 #define FA125_CONFIGADRDATA_PAGEADR_MASK 0x7FFC0000
 #define FA125_CONFIGADRDATA_EXEC         (1<<31)
 
+/* 0x1058 FE ptw register defintions */
+#define FA125_FE_PTW_MASK          0x000000FF
+
+/* 0x105C FE pl register defintions */
+#define FA125_FE_PL_MASK           0x0000FFFF
+
+/* 0x1060 FE ptw_last_adr register defintions */
+#define FA125_FE_PTW_LAST_ADR_MASK 0x00000FFF
+
+/* 0x1064 FE ptw_max_buf register defintions */
+#define FA125_FE_PTW_MAX_BUF_MASK  0x000000FF
+
+/* 0x1068 FE NSB register defintions */
+#define FA125_FE_NSB_MASK          0x00001FFF
+
+/* 0x106C FE NSA register defintions */
+#define FA125_FE_NSA_MASK          0x00003FFF
+
+/* 0xN070 - 0xN084 threshold register defintions */
+#define FA125_FE_THRESHOLD_MASK          0x00000FFF
+
+/* 0x1088 FE config1 defintions */
+#define FA125_FE_CONFIG1_MASK            0x000000FF
+#define FA125_FE_CONFIG1_MODE_MASK       0x00000007
+#define FA125_FE_CONFIG1_ENABLE          (1<<3)
+#define FA125_FE_CONFIG1_NPULSES_MASK    0x00000060
+#define FA125_FE_CONFIG1_PLAYBACK_ENABLE (1<<7)
+
+/* 0xN08C FE trig_count definitions */
+#define FA125_FE_TRIG_COUNT_MASK  0x0000FFFF
+
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
 #define FA125_PROC_CSR_CLEAR              (1<<1)
@@ -184,8 +221,11 @@ struct fa125_a32
 #define FA125_TRIGSRC_TRIGGER_P2             ((1<<1)|(1<<0))
 
 /* 0xD00C proc ctrl2 register definitions */
-#define FA125_PROC_CTRL2_TRIGGER_ENABLE      (1<<0)
-#define FA125_PROC_CTRL2_SYNCRESET_ENABLE    (1<<1)
+#define FA125_PROC_CTRL2_TRIGGER_ENABLE        (1<<0)
+#define FA125_PROC_CTRL2_SYNCRESET_ENABLE      (1<<1)
+#define FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK 0xC
+#define FA125_PROC_CTRL2_SYNCRESET_P0          (0)
+#define FA125_PROC_CTRL2_SYNCRESET_VME         (2)
 
 /* 0xD014 proc blocklevel register definitions */
 #define FA125_PROC_BLOCKLEVEL_MASK    0x0000FFFF
@@ -265,6 +305,9 @@ typedef enum
 #define FA125_INIT_USE_ADDRLIST        (1<<17)
 #define FA125_INIT_SKIP_FIRMWARE_CHECK (1<<18)
 
+/* fa125Status flags */
+#define FA125_STATUS_SHOWREGS          (1<<0)
+
 typedef enum
   {
     FA125_FIRMWARE_ERROR_ERASE            = (1<<0),
@@ -275,8 +318,31 @@ typedef enum
     FA125_FIRMWARE_ERROR_VERIFY_WRITE     = (1<<5)
   } FA125_FIRMWARE_ERROR_FLAGS;
 
+/* Default, maximum and minimum ADC Processing parameters */
+#define FA125_DEFAULT_PL     50
+#define FA125_DEFAULT_PTW    50
+#define FA125_DEFAULT_NSB     5
+#define FA125_DEFAULT_NSA    10
+#define FA125_DEFAULT_NP      3
+
+#define FA125_MAX_PL       1000
+#define FA125_MAX_PTW       512
+#define FA125_MAX_NSB       500
+#define FA125_MAX_NSA       500
+#define FA125_MAX_NP          3
+
+/* Processing Modes */
+#define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW
+#define FA125_SUPPORTED_NMODES 1
+#define FA125_PROC_MODE_RAWWINDOW  1
+
+extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
+
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
-int  fa125Status(int id);
+int  fa125Status(int id, int pflag);
+void fa125GStatus(int pflag);
+int  fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW, 
+		      unsigned int NSB, unsigned int NSA, unsigned int NP);
 int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
@@ -289,11 +355,16 @@ int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
 unsigned short fa125ReadOffset(int id, int chan);
 int  fa125ReadOffsetToFile(int id, char *filename);
+int  fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan);
+int  fa125SetCommonThreshold(int id, unsigned short tvalue);
+void fa125GSetCommonThreshold(unsigned short tvalue);
+int  fa125PrintThreshold(int id);
 int  fa125SetPulserAmplitude(int id, int chan, int dacData);
 int  fa125SetMulThreshold(int id, int dacData);
 int  fa125PrintTemps(int id);
 int  fa125SetClockSource(int id, int clksrc);
 int  fa125SetTriggerSource(int id, int trigsrc);
+int  fa125SetSyncResetSource(int id, int srsrc);
 int  fa125Poll(int id);
 unsigned int fa125GetBerrCount();
 int  fa125Clear(int id);

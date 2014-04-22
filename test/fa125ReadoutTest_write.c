@@ -80,7 +80,7 @@ main(int argc, char *argv[])
   /*     gefVmeSetDebugFlags(vmeHdl,0x0); */
   /* Set the TI structure pointer */
   /*     tiInit((2<<19),TI_READOUT_EXT_POLL,0); */
-  tiInit(TI_ADDR,TI_READOUT_EXT_POLL,0);
+  tiInit(TI_ADDR,TI_READOUT_EXT_POLL,TI_INIT_SKIP_FIRMWARE_CHECK);
   tiCheckAddresses();
 
   tiSetBlockLimit(100);
@@ -101,6 +101,8 @@ main(int argc, char *argv[])
 
   tiSetPrescale(0);
   tiSetBlockLevel(1);
+  tiSetBlockLimit(3);
+
 
   stat = tiIntConnect(TI_INT_VEC, myISR, 0);
   if (stat != OK) 
@@ -165,6 +167,7 @@ main(int argc, char *argv[])
   iFlag |= (1<<4);  /* Clock Source */
 
   stat = fa125Init(3<<19,1<<19,nmods,iFlag);
+  fa125CheckAddresses(fa125Slot(0));
   if (stat != OK) 
     {
       printf("ERROR: fa125Init failed \n");
@@ -172,11 +175,9 @@ main(int argc, char *argv[])
     } 
 
 
-  sdInit();
+  sdInit(1);
   sdSetActiveVmeSlots( fa125ScanMask());
   sdStatus(1);
-
-  getchar();
 
   fa125SetByteSwap(0,0);
   int iadc=0, faslot=0;
@@ -206,14 +207,16 @@ main(int argc, char *argv[])
       fa125SetBlocklevel(faslot, 1);
 
       fa125Reset(faslot, 0);
+      fa125SetProcMode(faslot,1,100,26,0,0,0);
       fa125Enable(faslot);
-      fa125Status(faslot);
+      fa125Status(faslot,0);
     }
 
   fa125ResetToken(0);
+  tiSyncReset(1);
 
   printf("Hit any key to enable Triggers...\n");
-  getchar();
+/*   getchar(); */
 
   /* Enable the TI and clear the trigger counter */
   tiIntEnable(0);
@@ -243,7 +246,7 @@ main(int argc, char *argv[])
       faslot = fa125Slot(iadc);
       fa125PrintTemps(faslot);
       fa125PowerOff(faslot);
-      fa125Status(faslot);
+      fa125Status(faslot,0);
     }
   printf("berr_count = %d\n",fa125GetBerrCount());
 
@@ -340,7 +343,6 @@ myISR(int arg)
     }
 #endif
 
-  *dma_dabufp++;
   extern int nfa125;
 
   dCnt = tiReadBlock(dma_dabufp,(490*nfa125)+200,1);
@@ -369,7 +371,7 @@ myISR(int arg)
     {
       faslot = fa125Slot(iadc);
 /*       fa125SoftTrigger(faslot); */
-      sleep(1);
+/*       sleep(1); */
     
 #ifdef OLDREADOUT
       iread=0;
@@ -378,7 +380,7 @@ myISR(int arg)
 	if(iread==timeout) 
 	  {
 	    printf("fa125 (%d) timeout\n",faslot);
-	    fa125Status(faslot);
+	    fa125Status(faslot,0);
 	  }
 	else
 	  {
@@ -455,7 +457,7 @@ myISR(int arg)
       
       for(idata=0;idata<len;idata++)
 	{
-#define OLDPRINTOUT
+/* #define OLDPRINTOUT */
 #ifdef OLDPRINTOUT
 	  if((idata%8)==0) fprintf(outfile,"\n\t");
 	  fprintf(outfile,"  0x%08x ",(unsigned int)LSWAP(outEvent->data[idata]));

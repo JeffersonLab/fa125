@@ -84,7 +84,7 @@ main(int argc, char *argv[])
   /*     gefVmeSetDebugFlags(vmeHdl,0x0); */
   /* Set the TI structure pointer */
   /*     tiInit((2<<19),TI_READOUT_EXT_POLL,0); */
-  tiInit(TI_ADDR,TI_READOUT_EXT_POLL,0);
+  tiInit(TI_ADDR,TI_READOUT_EXT_POLL,1);
   tiCheckAddresses();
 
   tiSetBlockLimit(0);
@@ -211,7 +211,7 @@ main(int argc, char *argv[])
 
       fa125Reset(faslot, 0);
       fa125Enable(faslot);
-      fa125Status(faslot);
+      fa125Status(faslot,1);
     }
 
   fa125ResetToken(0);
@@ -248,7 +248,7 @@ main(int argc, char *argv[])
       fa125PrintTemps(faslot);
       fa125PowerOff(faslot);
       fa125Reset(faslot,1);
-      fa125Status(faslot);
+      fa125Status(faslot,1);
     }
   printf("berr_count = %d\n",fa125GetBerrCount());
 
