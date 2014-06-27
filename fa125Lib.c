@@ -68,7 +68,7 @@ int fa125TriggerSource=0;
 int berr_count=0; /* A count of the number of BERR that have occurred when running fa125Poll() */
 /* store the dacOffsets in the library, until the firmware is able to read them back */
 static unsigned short fa125dacOffset[FA125_MAX_BOARDS+1][72];
-int fa125BlockError=0;       /* Whether (1) or not (0) Block Transfer had an error */
+int fa125BlockError=FA125_BLOCKERROR_NO_ERROR;       /* Whether (1) or not (0) Block Transfer had an error */
 
 /*******************************************************************************
  *
@@ -814,7 +814,6 @@ fa125GStatus(int pflag)
   printf("     ..........Firmware Rev.......... .................Addresses................\n");
   printf("Slot    Main        FE        Proc       A24        A32     A32 Multiblock Range\n");
   printf("--------------------------------------------------------------------------------\n");
-  printf(" 12   12345678   12345678   12345678   123456    12345678    12345678-12345678\n");
 
   for(ifa=0; ifa<nfa125; ifa++)
     {
@@ -829,7 +828,7 @@ fa125GStatus(int pflag)
 
       if(st[id].main.adr32 & FA125_ADR32_ENABLE)
 	{
-	  printf("%08x   ",
+	  printf("%08x    ",
 		 (st[id].main.adr32&FA125_ADR32_BASE_MASK)<<16);
 	}
       else
@@ -860,9 +859,9 @@ fa125GStatus(int pflag)
   for(ifa=0; ifa<nfa125; ifa++)
     {
       id = fa125Slot(ifa);
-      printf(" %2d  ",id);
+      printf(" %2d    ",id);
 
-      printf("%s  ",
+      printf("%s   ",
 	     st[id].main.pwrctl ? " ON" : "OFF");
 
       printf("%s  ", 
@@ -883,7 +882,7 @@ fa125GStatus(int pflag)
 	     ==FA125_TRIGSRC_TRIGGER_P2 ? "  P2 " :
 	     " ??? ");
 
-      printf("%s    ",
+      printf("%s     ",
 	     (st[id].proc.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
 	     == FA125_PROC_CTRL2_SYNCRESET_P0 ? " P0 " :
 	     (st[id].proc.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
@@ -1939,6 +1938,22 @@ fa125ResetToken(int id)
 }
 
 int
+fa125GetTokenMask()
+{
+  unsigned int rmask=0;
+  int ifa=0, id=0, rval=0;
+
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id=fa125Slot(ifa);
+      rval = (vmeRead32(&fa125p[id]->main.blockCSR) & FA125_BLOCKCSR_HAS_TOKEN)>>4;
+      rmask |= (rval<<id);
+    }
+
+  return rmask;
+}
+
+int
 fa125SetBlocklevel(int id, int blocklevel)
 {
   if(id==0) id=fa125ID[0];
@@ -2146,6 +2161,30 @@ fa125ScanMask()
   return(dmask);
 }
 
+const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES] =
+  {
+    "No Error",
+    "Termination on word count",
+    "Unknown Bus Error",
+    "Zero Word Count",
+    "DmaDone(..) Error"
+  };
+
+int
+fa125ReadBlockStatus(int pflag)
+{
+  if(pflag)
+    {
+      if(fa125BlockError!=FA125_BLOCKERROR_NO_ERROR)
+	{
+	  printf("%s: ERROR: %s",
+		 __FUNCTION__,fa125_blockerror_names[fa125BlockError]);
+	}
+    }
+
+  return fa125BlockError;
+}
+
 
 /**************************************************************************************
  *
@@ -2186,7 +2225,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
       return(ERROR);
     }
 
-  fa125BlockError=0;
+  fa125BlockError=FA125_BLOCKERROR_NO_ERROR;
   if(nwrds <= 0) nwrds= (FA125_MAX_ADC_CHANNELS*FA125_MAX_DATA_PER_CHANNEL) + 8;
   rmode = rflag&0x0f;
   async = rflag&0x80;
@@ -2290,7 +2329,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	      logMsg("fa125ReadBlock: DMA transfer terminated by unknown BUS Error (csr=0x%x xferCount=%d id=%d)\n",
 		     csr,xferCount,id,0,0,0);
 	      FA125UNLOCK;
-	      fa125BlockError=1;
+	      fa125BlockError=FA125_BLOCKERROR_UNKNOWN_BUS_ERROR;
 	      return(xferCount);
 	    }
 	} 
@@ -2298,11 +2337,12 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	{ /* Block Error finished without Bus Error */
 #ifdef VXWORKS
 	  logMsg("fa125ReadBlock: WARN: DMA transfer terminated by word count 0x%x\n",nwrds,0,0,0,0,0);
+	  fa125BlockError=FA125_BLOCKERROR_TERM_ON_WORDCOUNT;
 #else
 	  logMsg("fa125ReadBlock: WARN: DMA transfer returned zero word count 0x%x\n",nwrds,0,0,0,0,0);
+	  fa125BlockError=FA125_BLOCKERROR_ZERO_WORD_COUNT;
 #endif
 	  FA125UNLOCK;
-	  fa125BlockError=1;
 	  return(nwrds);
 	} 
       else 
@@ -2313,7 +2353,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	  logMsg("fa125ReadBlock: ERROR: vmeDmaDone returned an Error\n",0,0,0,0,0,0);
 #endif
 	  FA125UNLOCK;
-	  fa125BlockError=1;
+	  fa125BlockError=FA125_BLOCKERROR_DMADONE_ERROR;
 	  return(retVal>>2);
 	}
 

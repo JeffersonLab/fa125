@@ -339,6 +339,19 @@ typedef enum
 
 extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
 
+/* fadcBlockError values */
+typedef enum
+  {
+    FA125_BLOCKERROR_NO_ERROR          = 0,
+    FA125_BLOCKERROR_TERM_ON_WORDCOUNT = 1,
+    FA125_BLOCKERROR_UNKNOWN_BUS_ERROR = 2,
+    FA125_BLOCKERROR_ZERO_WORD_COUNT   = 3,
+    FA125_BLOCKERROR_DMADONE_ERROR     = 4,
+    FA125_BLOCKERROR_NTYPES            = 5
+  } FA125_BLOCKERROR_FLAGS;
+
+extern const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES];
+
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id, int pflag);
 void fa125GStatus(int pflag);
@@ -372,12 +385,14 @@ int  fa125Clear(int id);
 int  fa125Enable(int id);
 int  fa125Reset(int id, int reset);
 int  fa125ResetToken(int id);
+int  fa125GetTokenMask();
 int  fa125SetBlocklevel(int id, int blocklevel);
 int  fa125SoftTrigger(int id);
 int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
 int  fa125Bready(int id);
 unsigned int fa125GBready();
 unsigned int fa125ScanMask();
+int  fa125ReadBlockStatus(int pflag);
 int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
 void fa125DecodeData(unsigned int data);
 

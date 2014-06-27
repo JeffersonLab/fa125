@@ -65,7 +65,7 @@ main(int argc, char *argv[])
    *  dataType = 0 (D16)    1 (D32)    2 (BLK32) 3 (MBLK) 4 (2eVME) 5 (2eSST)
    *  sstMode  = 0 (SST160) 1 (SST267) 2 (SST320)
    */
-  vmeDmaConfig(2,2,1);
+  vmeDmaConfig(2,5,1);
 
   /* INIT dmaPList */
 
@@ -217,12 +217,14 @@ main(int argc, char *argv[])
       fa125Enable(faslot);
       fa125Status(faslot,0);
     }
+  fa125GStatus(faslot);
 
   fa125ResetToken(0);
   tiSyncReset(1);
 
   printf("Hit any key to enable Triggers...\n");
-/*   getchar(); */
+  getchar();
+  sdStatus(1);
 
   /* Enable the TI and clear the trigger counter */
   tiIntEnable(0);
@@ -239,6 +241,7 @@ main(int argc, char *argv[])
   getchar();
 
   tiStatus(1);
+  sdStatus(1);
 
 #ifdef SOFTTRIG
   /* No more soft triggers */
@@ -254,6 +257,7 @@ main(int argc, char *argv[])
       fa125PowerOff(faslot);
       fa125Status(faslot,0);
     }
+  fa125GStatus(faslot);
   printf("berr_count = %d\n",fa125GetBerrCount());
 
 /*   fa125Clear(0); */
