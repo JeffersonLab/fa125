@@ -129,6 +129,7 @@ struct fa125_a32
 #define FA125_CLOCK_P0               (1)
 #define FA125_CLOCK_INTERNAL_ENABLE  (2)
 #define FA125_CLOCK_INTERNAL         (3)
+#define FA125_CLOCK_MASK             0xF
 
 /* 0x38 slot_ga register definitions */
 #define FA125_SLOT_GA_MASK         0x0000001F

@@ -181,6 +181,7 @@ main(int argc, char *argv[])
 
   fa125SetByteSwap(0,0);
   int iadc=0, faslot=0;
+  int rval=0;
   extern int nfa125;
 
   fa125ResetToken(0);
@@ -207,7 +208,12 @@ main(int argc, char *argv[])
       fa125SetBlocklevel(faslot, 1);
 
       fa125Reset(faslot, 0);
-      fa125SetProcMode(faslot,1,100,26,0,0,0);
+      rval = fa125SetProcMode(faslot,1,100,26,0,0,0);
+      if(rval==ERROR)
+	{
+	  printf("ERROR!\n");
+	  goto CLOSE;
+	}
       fa125Enable(faslot);
       fa125Status(faslot,0);
     }

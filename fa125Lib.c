@@ -769,12 +769,219 @@ fa125Status(int id, int pflag)
 void
 fa125GStatus(int pflag)
 {
-  int ii;
-  
-  for (ii=0;ii<nfa125;ii++) 
+  int ifa, id;
+  struct fa125_a24 st[20];
+  unsigned int a24addr[20];
+
+  FA125LOCK;
+  for (ifa=0;ifa<nfa125;ifa++) 
     {
-      fa125Status(fa125Slot(ii),pflag);
+      id = fa125Slot(ifa);
+      a24addr[id]    = (unsigned int)fa125p[id] - fa125A24Offset;
+
+      st[id].main.version     = vmeRead32(&fa125p[id]->main.version);
+      st[id].main.adr32       = vmeRead32(&fa125p[id]->main.adr32);
+      st[id].main.adr_mb      = vmeRead32(&fa125p[id]->main.adr_mb);
+      st[id].main.pwrctl      = vmeRead32(&fa125p[id]->main.pwrctl);
+      st[id].main.clock       = vmeRead32(&fa125p[id]->main.clock);
+      st[id].main.ctrl1       = vmeRead32(&fa125p[id]->main.ctrl1);
+      st[id].main.blockCSR    = vmeRead32(&fa125p[id]->main.blockCSR);
+      st[id].main.block_count = vmeRead32(&fa125p[id]->main.block_count);
+
+
+      st[id].proc.version     = vmeRead32(&fa125p[id]->proc.version);
+      st[id].proc.trigsrc     = vmeRead32(&fa125p[id]->proc.trigsrc);
+      st[id].proc.ctrl2       = vmeRead32(&fa125p[id]->proc.ctrl2);
+      st[id].proc.blocklevel  = vmeRead32(&fa125p[id]->proc.blocklevel);
+      st[id].proc.trig_count  = vmeRead32(&fa125p[id]->proc.trig_count);
+      st[id].proc.trig2_count = vmeRead32(&fa125p[id]->proc.trig2_count);
+      st[id].proc.sync_count  = vmeRead32(&fa125p[id]->proc.sync_count);
+
+
+
+      st[id].fe[0].version = vmeRead32(&fa125p[id]->fe[0].version);
+      st[id].fe[0].config1 = vmeRead32(&fa125p[id]->fe[0].config1);
+      st[id].fe[0].pl      = vmeRead32(&fa125p[id]->fe[0].pl);
+      st[id].fe[0].ptw     = vmeRead32(&fa125p[id]->fe[0].ptw);
+      st[id].fe[0].nsa     = vmeRead32(&fa125p[id]->fe[0].nsa);
+      st[id].fe[0].nsb     = vmeRead32(&fa125p[id]->fe[0].nsb);
     }
+  FA125UNLOCK;
+
+  printf("\n");
+  
+  printf("                      fADC125 Module Configuration Summary\n\n");
+  printf("     ..........Firmware Rev.......... .................Addresses................\n");
+  printf("Slot    Main        FE        Proc       A24        A32     A32 Multiblock Range\n");
+  printf("--------------------------------------------------------------------------------\n");
+  printf(" 12   12345678   12345678   12345678   123456    12345678    12345678-12345678\n");
+
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      printf(" %2d   ",id);
+
+      printf("%08x   %08x   %08x   ",
+	     st[id].main.version, st[id].fe[0].version, st[id].proc.version);
+
+      printf("%06x    ",
+	     a24addr[id]);
+
+      if(st[id].main.adr32 & FA125_ADR32_ENABLE)
+	{
+	  printf("%08x   ",
+		 (st[id].main.adr32&FA125_ADR32_BASE_MASK)<<16);
+	}
+      else
+	{
+	  printf("  Disabled   ");
+	}
+
+      if(st[id].main.adr_mb & FA125_ADRMB_ENABLE) 
+	{
+	  printf("%08x-%08x",
+		 (st[id].main.adr_mb&FA125_ADRMB_MIN_MASK)<<16,
+		 (st[id].main.adr_mb&FA125_ADRMB_MAX_MASK));
+	}
+      else
+	{
+	  printf("Disabled");
+	}
+
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n");
+
+
+  printf("\n");
+  printf("              .Signal Sources..                        \n");
+  printf("Slot  Power   Clk   Trig   Sync     MBlk  Token  BERR  \n");
+  printf("--------------------------------------------------------------------------------\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      printf(" %2d  ",id);
+
+      printf("%s  ",
+	     st[id].main.pwrctl ? " ON" : "OFF");
+
+      printf("%s  ", 
+	     (st[id].main.clock & FA125_CLOCK_MASK)==FA125_CLOCK_INTERNAL ? " INT " :
+	     (st[id].main.clock & FA125_CLOCK_MASK)==FA125_CLOCK_INTERNAL_ENABLE ? "*INT*" :
+	     (st[id].main.clock & FA125_CLOCK_MASK)==FA125_CLOCK_P0 ? " VXS " :
+	     (st[id].main.clock & FA125_CLOCK_MASK)==FA125_CLOCK_P2 ? "  P2 " :
+	     " ??? ");
+
+      printf("%s  ",
+	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
+	     ==FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER ? "TIMER" :
+	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
+	     ==FA125_TRIGSRC_TRIGGER_INTERNAL_SUM ? " SUM " :
+	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
+	     ==FA125_TRIGSRC_TRIGGER_P0 ? " VXS " :
+	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
+	     ==FA125_TRIGSRC_TRIGGER_P2 ? "  P2 " :
+	     " ??? ");
+
+      printf("%s    ",
+	     (st[id].proc.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
+	     == FA125_PROC_CTRL2_SYNCRESET_P0 ? " P0 " :
+	     (st[id].proc.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
+	     == FA125_PROC_CTRL2_SYNCRESET_VME? " VXS " :
+	     " ??? ");
+
+      printf("%s   ",
+	     (st[id].main.ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK) ? "YES":" NO");
+
+      printf(" P0");
+      printf("%s  ",
+	     st[id].main.ctrl1 & (FA125_CTRL1_FIRST_BOARD) ? "-F":
+	     st[id].main.ctrl1 & (FA125_CTRL1_LAST_BOARD) ? "-L":
+	     "  ");
+
+      printf("%s     ",
+	     st[id].main.ctrl1 & FA125_CTRL1_ENABLE_BERR ? "YES" : " NO");
+
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n");
+
+  printf("\n");
+  printf("                        fADC125 Processing Mode Config\n\n");
+  printf("      Block                                             \n");
+  printf("Slot  Level  Mode    PL   PTW   NSB  NSA  NP   Playback \n");
+  printf("--------------------------------------------------------------------------------\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      printf(" %2d    ",id);
+
+      printf("%3d     ",st[id].proc.blocklevel & FA125_PROC_BLOCKLEVEL_MASK);
+
+      printf("%d    ",(st[id].fe[0].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1);
+
+      printf("%4d ", 8*st[id].fe[0].pl);
+
+      printf("%4d   ", 8*st[id].fe[0].ptw);
+
+      printf("%3d  ", 8*st[id].fe[0].nsb);
+
+      printf("%3d  ", 8*st[id].fe[0].nsa);
+
+      printf("%1d    ", (st[id].fe[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>5);
+
+      printf("%s   ",
+	     (st[id].fe[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE) ?" Enabled":"Disabled");
+
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n");
+
+  printf("\n");
+  printf("                        fADC125 Signal Scalers\n\n");
+  printf("Slot       Trig1       Trig2   SyncReset\n");
+  printf("--------------------------------------------------------------------------------\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      printf(" %2d   ",id);
+
+      printf("%10d  ", st[id].proc.trig_count);
+
+      printf("%10d  ", st[id].proc.trig2_count);
+
+      printf("%10d  ", st[id].proc.sync_count);
+
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n");
+
+  printf("\n");
+  printf("                        fADC125 Data Status\n\n");
+  printf("      Trigger   Block                 \n");
+  printf("Slot  Source    Ready  Blocks In Fifo \n");
+  printf("--------------------------------------------------------------------------------\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      printf(" %2d  ",id);
+
+      printf("%s    ",
+	     st[id].fe[0].config1 & FA125_FE_CONFIG1_ENABLE ? " Enabled" : "Disabled");
+
+      printf("%s       ",
+	     st[id].main.blockCSR & FA125_BLOCKCSR_BLOCK_READY ? "YES" : " NO");
+
+      printf("%10d ",
+	     st[id].main.block_count & FA125_BLOCKCOUNT_MASK);
+
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n");
+
+  printf("\n");
+  printf("\n");
+
 }
 
 
@@ -798,13 +1005,6 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
     {
       printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
-      return ERROR;
-    }
-
-  if((pmode<=0) || (pmode>5))
-    {
-      printf("%s: ERROR: Processing Mode (%d) out of range (pmod= 1-5)\n",
-	     __FUNCTION__,pmode);
       return ERROR;
     }
 

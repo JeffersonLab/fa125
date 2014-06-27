@@ -60,7 +60,7 @@ CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
 CFLAGS			= -I. -I${LINUXVME_INC} -I/usr/include \
-			  -L${LINUXVME_LIB} -L.
+			  -L. -L${LINUXVME_LIB} 
 ifdef DEBUG
 CFLAGS			+= -Wall -g
 else
@@ -72,6 +72,9 @@ OBJS			= fa125Lib.o
 LIBS			= libfa125.a
 
 all: $(LIBS)
+
+fa125Lib.o: fa125Lib.c fa125Lib.h Makefile
+	$(CC) -c $(CFLAGS) -o $@ fa125Lib.c
 
 libfa125.a: fa125Lib.o
 	$(CC) -fpic -shared $(CFLAGS) -o libfa125.so fa125Lib.c
