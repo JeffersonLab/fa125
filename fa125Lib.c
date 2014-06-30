@@ -113,7 +113,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   volatile unsigned int rdata=0;
   unsigned int laddr=0, a32addr=0;
   volatile struct fa125_a24 *fa125;
-  int useList=0, noBoardInit=0, noFirmwareCheck=0;;
+  int useList=0, noBoardInit=0, noFirmwareCheck=0;
   int nfind=0, islot=0, FA_SLOT=0, ii=0;
   int trigSrc=0, clkSrc=0, srSrc=0;
   unsigned int boardID=0, fw_version=0;
@@ -208,7 +208,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   res = sysBusToLocalAdrs(0x09,(char *)fa125A32Base,(char **)&laddr);
   if (res != 0) 
     {
-      printf("faInit: ERROR in sysBusToLocalAdrs(0x09,0x%x,&laddr) \n",fadcA32Base);
+      printf("faInit: ERROR in sysBusToLocalAdrs(0x09,0x%x,&laddr) \n",fa125A32Base);
       return(ERROR);
     } 
   else 
@@ -2241,7 +2241,7 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
       if((unsigned long) (data)&0x7) 
 	{
 #ifdef VXWORKS
-	  *data = FA215_DUMMY_DATA;
+	  *data = FA125_DUMMY_DATA;
 #else
 	  *data = LSWAP(FA125_DUMMY_DATA);
 #endif
@@ -3256,12 +3256,14 @@ fa125FirmwareVerifyFull(int id)
     }
 
 
+#ifndef VXWORKSPPC  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
       fa125FWstats.npages_read                 = 0;
       fa125FWstats.main_page_read_time.tv_sec  = 0;
       fa125FWstats.main_page_read_time.tv_nsec = 0;
     }
+#endif
   
   FA125LOCK;
   vmeWrite32(&fa125p[id]->main.configCSR, 0);
@@ -3278,11 +3280,12 @@ fa125FirmwareVerifyFull(int id)
 	  fflush(stdout);
 	}
 
-      
+#ifndef VXWORKSPPC      
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  clock_gettime(CLOCK_MONOTONIC, &time_start);
 	}
+#endif
       if(ipage==(MCS_pageSize-1)) stayon=0;
 
       /* Read a page from main memory */
@@ -3294,6 +3297,7 @@ fa125FirmwareVerifyFull(int id)
 	  return ERROR;
 	}
 
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  fa125FWstats.npages_read++;
@@ -3301,6 +3305,7 @@ fa125FirmwareVerifyFull(int id)
 	  res = tsSubtract(time_end, time_start);
 	  fa125FWstats.main_page_read_time = tsAdd(fa125FWstats.main_page_read_time, res);
 	}
+#endif
 
       /* Verify the page with that read from the file */
       if(fa125FirmwareVerifyPage(ipage)!=OK)
@@ -3663,12 +3668,14 @@ fa125FirmwareEraseFull(int id)
       return ERROR;
     }
 
+#ifndef VXWORKSPPC  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
       fa125FWstats.nblocks_erased=0;
       fa125FWstats.erase_time.tv_sec  = 0;
       fa125FWstats.erase_time.tv_nsec = 0;
     }
+#endif
 
   printf("** Erasing Main Memory **\n");
   for(iblock=0; iblock<nblocks; iblock++)
@@ -3678,11 +3685,13 @@ fa125FirmwareEraseFull(int id)
 	  printf(".");
 	  fflush(stdout);
 	}
-  
+
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  clock_gettime(CLOCK_MONOTONIC, &time_start);
 	}
+#endif
 
       /* Perform a block erase */
       if(fa125FirmwareBlockErase(id,iblock,stayon,1)!=OK)
@@ -3691,6 +3700,7 @@ fa125FirmwareEraseFull(int id)
 	  return ERROR;
 	}
 
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  fa125FWstats.nblocks_erased++;
@@ -3698,7 +3708,7 @@ fa125FirmwareEraseFull(int id)
 	  res = tsSubtract(time_end, time_start);
 	  fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
 	}
-
+#endif
     }
   printf("\n");
   fflush(stdout);
@@ -3756,12 +3766,14 @@ fa125FirmwareGEraseFull()
   int id=0, ifa=0;
   int nerrors=0;
   
+#ifndef VXWORKSPPC  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
       fa125FWstats.nblocks_erased=0;
       fa125FWstats.erase_time.tv_sec  = 0;
       fa125FWstats.erase_time.tv_nsec = 0;
     }
+#endif
 
   memset((char *)fa125FirmwareErrorFlags, 0, sizeof(fa125FirmwareErrorFlags));
 
@@ -3792,6 +3804,7 @@ fa125FirmwareGEraseFull()
 
 	  if(iblock!=0)
 	    {
+#ifndef VXWORKSPPC  
 	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 		{
 		  fa125FWstats.nblocks_erased++;
@@ -3799,12 +3812,15 @@ fa125FirmwareGEraseFull()
 		  res = tsSubtract(time_end, time_start);
 		  fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
 		}
+#endif
 	    }
 	  
+#ifndef VXWORKSPPC  
 	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	    {
 	      clock_gettime(CLOCK_MONOTONIC, &time_start);
 	    }
+#endif
 
 	  /* Perform a block erase */
 	  if(fa125FirmwareBlockErase(id,iblock,stayon,0)!=OK)
@@ -3825,6 +3841,7 @@ fa125FirmwareGEraseFull()
   /* Wait for last block erase to complete */
   taskDelay(7);
 
+#ifndef VXWORKSPPC  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
       fa125FWstats.nblocks_erased++;
@@ -3832,7 +3849,7 @@ fa125FirmwareGEraseFull()
       res = tsSubtract(time_end, time_start);
       fa125FWstats.erase_time = tsAdd(res, fa125FWstats.erase_time);
     }
-  
+#endif  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_VERIFY_ERASE)
       {
 	stayon=1;
@@ -3920,6 +3937,7 @@ fa125FirmwareWriteFull(int id)
       return ERROR;
     }
 
+#ifndef VXWORKSPPC  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
       fa125FWstats.nbuffers_written          = 0;
@@ -3930,6 +3948,7 @@ fa125FirmwareWriteFull(int id)
       fa125FWstats.buffer_push_time.tv_sec  = 0;
       fa125FWstats.buffer_push_time.tv_nsec = 0;
     }
+#endif
 
   printf("** Writing file to memory **\n");
   for(ipage=0; ipage<=MCS_pageSize; ipage++)
@@ -3940,16 +3959,19 @@ fa125FirmwareWriteFull(int id)
 	  fflush(stdout);
 	}
 
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  clock_gettime(CLOCK_MONOTONIC, &time_start);
 	}
+#endif
       if(fa125FirmwareWriteToBuffer(id, ipage)!=OK)
 	{
 	  printf("\n%s: Error writing to buffer\n",__FUNCTION__);
 	  return ERROR;
 	}
 
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  fa125FWstats.nbuffers_written++;
@@ -3957,6 +3979,7 @@ fa125FirmwareWriteFull(int id)
 	  res = tsSubtract(time_end, time_start);
 	  fa125FWstats.buffer_write_time = tsAdd(fa125FWstats.buffer_write_time, res);
 	}
+#endif
 
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_WRITE_BUFFER)
 	{
@@ -3974,16 +3997,19 @@ fa125FirmwareWriteFull(int id)
 	    }
 	}
 
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  clock_gettime(CLOCK_MONOTONIC, &time_start);
 	}
+#endif
       if(fa125FirmwarePushBufferToMain(id, ipage, 1)!=OK)
 	{
 	  printf("\n%s: Error in pushing buffer to main memory (page = %d)\n",
 		 __FUNCTION__,ipage);
 	  return ERROR;
 	}
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  fa125FWstats.nbuffers_pushed++;
@@ -3991,6 +4017,7 @@ fa125FirmwareWriteFull(int id)
 	  res = tsSubtract(time_end, time_start);
 	  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
 	}
+#endif
     }
   
   printf("\n");
@@ -4022,6 +4049,7 @@ fa125FirmwareGWriteFull()
       return ERROR;
     }
 
+#ifndef VXWORKSPPC  
   if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
     {
       fa125FWstats.nbuffers_written          = 0;
@@ -4032,6 +4060,7 @@ fa125FirmwareGWriteFull()
       fa125FWstats.buffer_push_time.tv_sec  = 0;
       fa125FWstats.buffer_push_time.tv_nsec = 0;
     }
+#endif
 
   printf("** Writing file to memory **\n");
   printf("All: ");
@@ -4063,6 +4092,7 @@ fa125FirmwareGWriteFull()
 		}
 
 	      /* Wait for the previous page push to complete */
+#ifndef VXWORKSPPC  
 	      if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 		{
 		  fa125FWstats.nbuffers_pushed++;
@@ -4070,12 +4100,15 @@ fa125FirmwareGWriteFull()
 		  res = tsSubtract(time_end, time_start);
 		  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
 		}
+#endif
 	    }
 
+#ifndef VXWORKSPPC  
 	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	    {
 	      clock_gettime(CLOCK_MONOTONIC, &time_start);
 	    }
+#endif
 
 	  /* Write page to buffer */
 	  if(fa125FirmwareWriteToBuffer(id, ipage)!=OK)
@@ -4085,6 +4118,7 @@ fa125FirmwareGWriteFull()
 /* 	      return ERROR; */
 	    }
 
+#ifndef VXWORKSPPC  
 	  if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	    {
 	      fa125FWstats.nbuffers_written++;
@@ -4097,6 +4131,7 @@ fa125FirmwareGWriteFull()
 	    {
 	      clock_gettime(CLOCK_MONOTONIC, &time_start);
 	    }
+#endif
 
 	  /* Push buffer to main */
 	  if(fa125FirmwarePushBufferToMain(id, ipage, 0)!=OK)
@@ -4126,6 +4161,7 @@ fa125FirmwareGWriteFull()
 /* 	  return ERROR; */
 	}
 
+#ifndef VXWORKSPPC  
       if(fa125FirmwareDebug&FA125_FIRMWARE_DEBUG_MEASURE_TIMES)
 	{
 	  fa125FWstats.nbuffers_pushed++;
@@ -4133,6 +4169,7 @@ fa125FirmwareGWriteFull()
 	  res = tsSubtract(time_end, time_start);
 	  fa125FWstats.buffer_push_time = tsAdd(fa125FWstats.buffer_push_time, res);
 	}
+#endif
       
     } /* nfa125 */
   

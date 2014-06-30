@@ -291,7 +291,9 @@ typedef enum
     FA125_FIRMWARE_DEBUG_WAIT_FOR_READY    = (1<<2),
     FA125_FIRMWARE_DEBUG_MCS_SKIPPED_LINES = (1<<3),
     FA125_FIRMWARE_DEBUG_VERIFY_ERASE      = (1<<4),
+#ifndef VXWORKSPPC  
     FA125_FIRMWARE_DEBUG_MEASURE_TIMES     = (1<<5)
+#endif
   } FA125_FIRMWARE_DEBUG_FLAGS;
 
 /* fa125Init initialization flag bits */
