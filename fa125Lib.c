@@ -1444,6 +1444,167 @@ fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan)
 }
 
 int
+fa125SetChannelDisable(int id, int channel)
+{
+  int feChip=0, feChan=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetChannelDisable: ERROR : FA125 in slot %d is not initialized \n",
+	     id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if((channel<0) || (channel>=FA125_MAX_ADC_CHANNELS))
+    {
+      logMsg("faSetChannelDisable: ERROR: Invalid channel (%d).  Must be 0-%d\n",
+	     channel, FA125_MAX_ADC_CHANNELS-1,3,4,5,6);
+      return ERROR;
+    }
+
+  feChip = (int)(channel/6);
+  feChan = (int)(channel%6);
+
+  FA125LOCK;
+  chipMask = (vmeRead32(&fa125p[id]->fe[feChip].config2) & FA125_FE_CONFIG2_CH_MASK) 
+    | (1<<feChan);
+  vmeWrite32(&fa125p[id]->fe[feChip].config2,chipMask);
+  FA125UNLOCK;
+
+  return(OK);
+}
+
+int
+fa125SetChannelDisableMask(int id, unsigned int cmask0, 
+			   unsigned int cmask1, unsigned int cmask2)
+{
+  int ichip=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetChannelDisableMask: ERROR : FA125 in slot %d is not initialized \n",
+	     id,0,0,0,0,0);
+      return(ERROR);
+    }
+  
+  if((cmask0 > 0xFFFFFF) || (cmask1 > 0xFFFFFF) || (cmask2 > 0xFFFFFF))
+    {
+      logMsg("fa125SetChannelDisableMask: ERROR : Invalid channel mask(s) (0x%08x, 0x%08x, 0x%08x).\n",
+	     cmask0,cmask1,cmask2,0,0,0);
+      logMsg("                          : Each mask must be less than 24 bits.\n",
+	     0,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  FA125LOCK;
+  for(ichip=0; ichip<4; ichip++)
+    {
+      chipMask = (cmask0>>(ichip*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=4; ichip<8; ichip++)
+    {
+      chipMask = (cmask1>>((ichip-4)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=8; ichip<12; ichip++)
+    {
+      chipMask = (cmask2>>((ichip-8)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125SetChannelEnable(int id, int channel)
+{
+  int feChip=0, feChan=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("faSetChannelEnable: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  if((channel<0) || (channel>=FA125_MAX_ADC_CHANNELS))
+    {
+      logMsg("faSetChannelEnable: ERROR: Invalid channel (%d).  Must be 0-%d\n",
+	     channel, FA125_MAX_ADC_CHANNELS-1,3,4,5,6);
+      return ERROR;
+    }
+
+
+  feChip = (int)(channel/6);
+  feChan = (int)(channel%6);
+
+  FA125LOCK;
+  chipMask = (vmeRead32(&fa125p[id]->fe[feChip].config2) & FA125_FE_CONFIG2_CH_MASK) 
+    & ~(1<<feChan);
+
+  vmeWrite32(&fa125p[id]->fe[feChip].config2,chipMask);
+  FA125UNLOCK;
+  
+  return OK;
+}
+
+int
+fa125SetChannelEnableMask(int id, unsigned int cmask0, 
+			  unsigned int cmask1, unsigned int cmask2)
+{
+  int ichip=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetChannelEnableMask: ERROR : FA125 in slot %d is not initialized \n",
+	     id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if((cmask0 > 0xFFFFFF) || (cmask1 > 0xFFFFFF) || (cmask2 > 0xFFFFFF))
+    {
+      logMsg("fa125SetChannelEnableMask: ERROR : Invalid channel mask(s) (0x%08x, 0x%08x, 0x%08x).\n",
+	     cmask0,cmask1,cmask2,0,0,0);
+      logMsg("                          : Each mask must be less than 24 bits.\n",
+	     0,0,0,0,0,0);
+      return(ERROR);
+    }
+  
+  cmask0 = (~cmask0) & 0xFFFFFF;
+  cmask1 = (~cmask1) & 0xFFFFFF;
+  cmask2 = (~cmask2) & 0xFFFFFF;
+
+  FA125LOCK;
+  for(ichip=0; ichip<4; ichip++)
+    {
+      chipMask = (cmask0>>(ichip*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=4; ichip<8; ichip++)
+    {
+      chipMask = (cmask1>>((ichip-4)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=8; ichip<12; ichip++)
+    {
+      chipMask = (cmask2>>((ichip-8)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
 fa125SetCommonThreshold(int id, unsigned short tvalue)
 {
   int ii,rval=OK;
