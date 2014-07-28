@@ -73,7 +73,8 @@ struct fa125_a24_fe
   /* 0xN070 */ volatile UINT32 threshold[6];
   /* 0xN088 */ volatile UINT32 config1;
   /* 0xN08C */ volatile UINT32 trig_count;
-  /* 0xN090 */          UINT32 blank2[(0x1000-0x90)/4];
+  /* 0xN090 */ volatile UINT32 config2;
+  /* 0xN094 */          UINT32 blank2[(0x1000-0x94)/4];
 };
 
 struct fa125_a24_proc 
@@ -89,6 +90,8 @@ struct fa125_a24_proc
   /* 0xD020 */ volatile UINT32 clock125_count;
   /* 0xD024 */ volatile UINT32 sync_count;
   /* 0xD028 */ volatile UINT32 trig2_count;
+  /* 0xD02C */ volatile UINT32 pulser_control;
+  /* 0xD030 */ volatile UINT32 pulser_trig_delay;
 };
 
 struct fa125_a24 
@@ -106,9 +109,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010101
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010101
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00010101
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010201
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010201
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00010201
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -209,6 +212,9 @@ struct fa125_a32
 /* 0xN08C FE trig_count definitions */
 #define FA125_FE_TRIG_COUNT_MASK  0x0000FFFF
 
+/* 0xN090 FE config2 definitions */
+#define FA125_FE_CONFIG2_CH_MASK  0x0000003F
+
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
 #define FA125_PROC_CSR_CLEAR              (1<<1)
@@ -249,6 +255,13 @@ struct fa125_a32
 /* 0xD028 proc trig2_count register definitions */
 #define FA125_PROC_TRIG2COUNT_MASK  0xFFFFFFFF
 #define FA125_PROC_TRIG2COUNT_RESET 0
+
+/* 0xD02C pulser_control register definitions */
+#define FA125_PROC_PULSER_CONTROL_PULSE            (1<<0)
+#define FA125_PROC_PULSER_CONTROL_DELAYED_TRIGGER  (1<<1)
+
+/* 0xD030 pulser_trig_delay register definitions */
+#define FA125_PROC_PULSER_TRIG_DELAY_MASK   0x00000FFF
 
 /* Define data types and masks */
 #define FA125_DATA_FORMAT0     (0<<13)
