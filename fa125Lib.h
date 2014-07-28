@@ -380,6 +380,7 @@ int  fa125SetMulThreshold(int id, int dacData);
 int  fa125PrintTemps(int id);
 int  fa125SetClockSource(int id, int clksrc);
 int  fa125SetTriggerSource(int id, int trigsrc);
+int  fa125GetTriggerSource(int id);
 int  fa125SetSyncResetSource(int id, int srsrc);
 int  fa125Poll(int id);
 unsigned int fa125GetBerrCount();

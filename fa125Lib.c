@@ -245,10 +245,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	}
       else 
 	{
-	  /* Check that it is an FA125 (using main firmare version) 
-	     ... with and without byte swapping */
-	  if( ((rdata) != FA125_ID) &&
-	      ((rdata) != LSWAP(FA125_ID)) )
+	  /* Check that it is an FA125 */
+	  if(rdata != FA125_ID)
 	    {
 	      printf("%s: ERROR: For module at 0x%x, Invalid Board ID: 0x%x\n",
 		     __FUNCTION__,fa125AddrList[islot],rdata);
@@ -256,18 +254,6 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	    }
 	  else
 	    {
-#ifdef BYTESWAPPING
-	      /* Turn on hardware byteswapping, if needed */
-#ifdef VXWORKS
-	      fa125->main.swapctl = 0;
-#else
-	      fa125->main.swapctl = 0xffffffff;
-#endif
-#else
-	      vmeWrite32(&fa125->main.swapctl, 0);
-#endif// BYTESWAPPING
-
-
 	      /* Check the Firmware Versions */
 	      if(!noFirmwareCheck)
 		{
@@ -377,15 +363,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
   for(islot=0; islot<nfa125; islot++)
     {
       FA_SLOT = fa125ID[islot];
-#ifdef BYTESWAPPING
-#ifdef VXWORKS
-      /* Turn off hardware byte swapping for vxWorks */
-      fa125SetByteSwap(FA_SLOT,0);
-#else
-      /* Turn on hardware byte swapping for Linux */
-      fa125SetByteSwap(FA_SLOT,1);
-#endif
-#endif // BYTESWAPPING
+
       fa125Clear(FA_SLOT);
 
       /* Set the clock source */
@@ -514,6 +492,12 @@ fa125CheckAddresses(int id)
   expected = 0xD000;
   if(offset != expected)
     printf("%s: ERROR fa125p[%d]->proc not at offset = 0x%x (@ 0x%x)\n",
+	   __FUNCTION__,id,expected,offset);
+
+  offset = ((unsigned int) &fa125p[id]->proc.trigsrc) - base;
+  expected = 0xD008;
+  if(offset != expected)
+    printf("%s: ERROR fa125p[%d]->proc.trigsrc not at offset = 0x%x (@ 0x%x)\n",
 	   __FUNCTION__,id,expected,offset);
 
 }
@@ -1676,6 +1660,7 @@ fa125SetClockSource(int id, int clksrc)
 int
 fa125SetTriggerSource(int id, int trigsrc)
 {
+  unsigned int regset=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1694,28 +1679,47 @@ fa125SetTriggerSource(int id, int trigsrc)
   switch(trigsrc)
     {
     case 1: /* Internal Timer */
-      trigsrc = FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER;
+      regset = FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER;
       break;
 
     case 2: /* Internal Sum */
-      trigsrc = FA125_TRIGSRC_TRIGGER_INTERNAL_SUM;
+      regset = FA125_TRIGSRC_TRIGGER_INTERNAL_SUM;
       break;
 
     case 3: /* P2 */
-      trigsrc = FA125_TRIGSRC_TRIGGER_P2;
+      regset = FA125_TRIGSRC_TRIGGER_P2;
       break;
 
     case 0: /* P0 */
     default:
-      trigsrc = FA125_TRIGSRC_TRIGGER_P0;
+      regset = FA125_TRIGSRC_TRIGGER_P0;
       break;
     }
 
   FA125LOCK;
-  vmeWrite32(&fa125p[id]->proc.trigsrc, trigsrc);
+  vmeWrite32(&fa125p[id]->proc.trigsrc, regset);
   FA125UNLOCK;
 
   return OK;
+}
+
+int
+fa125GetTriggerSource(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = vmeRead32(&fa125p[id]->proc.trigsrc);
+  FA125UNLOCK;
+  
+  return rval;
 }
 
 int
