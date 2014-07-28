@@ -2155,6 +2155,144 @@ fa125SoftTrigger(int id)
   return OK;
 }
 
+/**
+ * @ingroup PulserConfig
+ * @brief Set the delay between the output pulse and f1TDC trigger
+ *
+ *  @param id 
+ *   - Slot Number
+ *
+ */
+int
+fa125SetPulserTriggerDelay(int id, int delay)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetPulserTriggerDelay: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  if(delay>FA125_PROC_PULSER_TRIG_DELAY_MASK)
+    {
+      logMsg("fa125SetPulserTriggerDelay: ERROR: delay (%d) out of range.  Must be <= %d",
+	     delay,FA125_PROC_PULSER_TRIG_DELAY_MASK,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.pulser_trig_delay, delay);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ * @ingroup PulserConfig
+ * @brief Trigger the pulser
+ *
+ *  @param id 
+ *   - Slot Number
+ * @param output
+ *   - 1: Pulse out only
+ *   - 2: fa125 Trigger only
+ *   - 3: Both pulse and trigger
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SoftPulser(int id, int output)
+{
+  unsigned int selection=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SoftPulser: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  switch(output)
+    {
+    case 0: /* Just the pulse out */
+      selection = FA125_PROC_PULSER_CONTROL_PULSE;
+      break;
+
+    case 1: /* Just the trigger out */
+      selection = FA125_PROC_PULSER_CONTROL_DELAYED_TRIGGER;
+      break;
+
+    case 2: /* Pulse and trigger out */
+      selection = FA125_PROC_PULSER_CONTROL_PULSE 
+	| FA125_PROC_PULSER_CONTROL_DELAYED_TRIGGER;
+      break;
+
+    default:
+      logMsg("fa125SoftPulser: ERROR: Invalid output option (%d)",
+	     output,2,3,4,5,6);
+      return ERROR;
+    }
+
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.pulser_control, selection);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Enable the programmable pulse generator
+ *  @param id Slot number
+ *  @sa fa125SetPPG fa125PPGDisable
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125PPGEnable(int id)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125PPGEnable: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->fe[0].config1, 
+	     vmeRead32(&fa125p[id]->fe[0].config1) | FA125_FE_CONFIG1_PLAYBACK_ENABLE);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Disable the programmable pulse generator
+ *  @param id Slot number
+ *  @sa fa125SetPPG fa125PPGEnable
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125PPGDisable(int id)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125PPGDisable: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->fe[0].config1, 
+	     vmeRead32(&fa125p[id]->fe[0].config1) & ~FA125_FE_CONFIG1_PLAYBACK_ENABLE);
+  FA125UNLOCK;
+
+  return OK;
+}
+
 /**************************************************************************************
  *
  *  fa125ReadEvent - General Data readout routine
