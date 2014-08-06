@@ -189,6 +189,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 #else
   res = vmeBusToLocalAdrs(0x39,(char *)fa125AddrList[0],(char **)&laddr);
 #endif
+
   if (res != 0) 
     {
 #ifdef VXWORKS
@@ -328,7 +329,6 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	    }
 	  nfa125++;
 	}
-
     }
 
   if(noBoardInit)
@@ -2182,7 +2182,36 @@ fa125SetPulserTriggerDelay(int id, int delay)
     }
 
   FA125LOCK;
-  vmeWrite32(&fa125p[id]->proc.pulser_trig_delay, delay);
+  vmeWrite32(&fa125p[id]->proc.pulser_trig_delay, 
+	     (vmeRead32(&fa125p[id]->proc.pulser_trig_delay) &~ FA125_PROC_PULSER_TRIG_DELAY_MASK)
+	      | delay);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125SetPulserWidth(int id, int width)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetPulserWidth: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  if(width>(FA125_PROC_PULSER_WIDTH_MASK>>12))
+    {
+      logMsg("fa125SetPulserWidth: ERROR: width (%d) out of range.  Must be <= %d",
+	     width,(FA125_PROC_PULSER_WIDTH_MASK>>12),3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.pulser_trig_delay, 
+	     (vmeRead32(&fa125p[id]->proc.pulser_trig_delay) &~ FA125_PROC_PULSER_WIDTH_MASK)
+	     | (width<<12));
   FA125UNLOCK;
 
   return OK;
@@ -2195,9 +2224,9 @@ fa125SetPulserTriggerDelay(int id, int delay)
  *  @param id 
  *   - Slot Number
  * @param output
- *   - 1: Pulse out only
- *   - 2: fa125 Trigger only
- *   - 3: Both pulse and trigger
+ *   - 0: Pulse out only
+ *   - 1: fa125 Trigger only
+ *   - 2: Both pulse and trigger
  *  @return OK if successful, otherwise ERROR.
  */
 int
@@ -2239,6 +2268,75 @@ fa125SoftPulser(int id, int output)
   FA125UNLOCK;
 
   return OK;
+}
+
+
+/**
+ *  @ingroup Config
+ *  @brief Setup fADC125 Progammable Pulse Generator
+ *
+ *  @param id Slot number
+ *  @param sdata  Array of sample data to be programmed
+ *  @param nsamples Number of samples contained in sdata
+ *
+ *  @sa fa125PPGEnable fa125PPGDisable
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SetPPG(int id, unsigned short *sdata, int nsamples)
+{
+  // FIXME... this still needs ported from fa250 to fa125
+  int ii, diff;
+  unsigned short rval;
+
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetPPG: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if(sdata == NULL) 
+    {
+      logMsg("fa125SetPPG: ERROR: Invalid Pointer to sample data\n",1,2,3,4,5,6);
+      return(ERROR);
+    }
+
+  /*Defaults */
+  if((nsamples <= 0)||(nsamples>FA125_PPG_MAX_SAMPLES)) nsamples = FA125_PPG_MAX_SAMPLES;
+  diff = FA125_PPG_MAX_SAMPLES - nsamples;
+
+  FA125LOCK;
+  for(ii=0;ii<(nsamples-2);ii++) 
+    {
+      vmeWrite32(&fa125p[id]->fe[0].test_waveform, 
+		 (sdata[ii]|FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA));
+      rval = vmeRead32(&fa125p[id]->fe[0].test_waveform);
+      if( (rval&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK) != sdata[ii])
+	logMsg("faSetPPG: ERROR: Write error %x != %x (ii=%d)\n",rval, sdata[ii],ii,4,5,6);
+
+    }
+
+  vmeWrite32(&fa125p[id]->fe[0].test_waveform, 
+	     (sdata[(nsamples-2)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
+  rval = vmeRead32(&fa125p[id]->fe[0].test_waveform);
+  if(rval != sdata[(nsamples-2)])
+	logMsg("faSetPPG: ERROR: Write error %x != %x\n",
+	       rval, sdata[nsamples-2],3,4,5,6);
+  vmeWrite32(&fa125p[id]->fe[0].test_waveform, 
+	     (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
+  rval = vmeRead32(&fa125p[id]->fe[0].test_waveform);
+  if(rval != sdata[(nsamples-1)])
+	logMsg("faSetPPG: ERROR: Write error %x != %x\n",
+	       rval, sdata[nsamples-1],3,4,5,6);
+    
+/*   vmeWrite32(&fa125p[id]->fe[0].test_waveform, (sdata[(nsamples-2)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK)); */
+/*   vmeWrite32(&fa125p[id]->fe[0].test_waveform, (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK)); */
+    
+  FA125UNLOCK;
+  
+  return(OK);
 }
 
 /**

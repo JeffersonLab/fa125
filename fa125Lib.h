@@ -74,7 +74,8 @@ struct fa125_a24_fe
   /* 0xN088 */ volatile UINT32 config1;
   /* 0xN08C */ volatile UINT32 trig_count;
   /* 0xN090 */ volatile UINT32 config2;
-  /* 0xN094 */          UINT32 blank2[(0x1000-0x94)/4];
+  /* 0xN094 */ volatile UINT32 test_waveform;
+  /* 0xN098 */          UINT32 blank2[(0x1000-0x98)/4];
 };
 
 struct fa125_a24_proc 
@@ -215,6 +216,12 @@ struct fa125_a32
 /* 0xN090 FE config2 definitions */
 #define FA125_FE_CONFIG2_CH_MASK  0x0000003F
 
+/* 0xN094 FE test_waveform definitions */
+#define FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK  0x00000FFF
+#define FA125_FE_TEST_WAVEFORM_OVERFLOW       (1<<12)
+#define FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA (1<<15)
+#define FA125_PPG_MAX_SAMPLES                 32
+
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
 #define FA125_PROC_CSR_CLEAR              (1<<1)
@@ -262,6 +269,7 @@ struct fa125_a32
 
 /* 0xD030 pulser_trig_delay register definitions */
 #define FA125_PROC_PULSER_TRIG_DELAY_MASK   0x00000FFF
+#define FA125_PROC_PULSER_WIDTH_MASK        0x00FFF000
 
 /* Define data types and masks */
 #define FA125_DATA_FORMAT0     (0<<13)
@@ -409,7 +417,9 @@ int  fa125GetTokenMask();
 int  fa125SetBlocklevel(int id, int blocklevel);
 int  fa125SoftTrigger(int id);
 int  fa125SetPulserTriggerDelay(int id, int delay);
+int  fa125SetPulserWidth(int id, int width);
 int  fa125SoftPulser(int id, int output);
+int  fa125SetPPG(int id, unsigned short *sdata, int nsamples);
 int  fa125PPGEnable(int id);
 int  fa125PPGDisable(int id);
 int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
