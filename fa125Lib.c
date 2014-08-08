@@ -1157,47 +1157,6 @@ fa125PowerOn (int id)
   return OK;
 }
 
-#ifdef DOESNOTEXIST
-/*******************************************************************************
- *
- * fa125SetTestTrigger - Enable/Disable internal pulser trigger
- *
- */
-
-int
-fa125SetTestTrigger (int id, int mode)
-{
-  if(id==0) id=fa125ID[0];
-  
-  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
-    {
-      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
-      return ERROR;
-    }
-
-  if(mode < 0 || mode >1)
-    {
-      printf("%s: ERROR: Invalid mode = %d\n",__FUNCTION__,mode);
-      return ERROR;
-    }
-
-  FA125LOCK;
-  if(mode==0) /* turn test trigger off */
-    {
-      vmeWrite32(&fa125p[id]->main.csr,
-		 vmeRead32(&fa125p[id]->main.csr) & ~FA125_MAIN_CSR_TEST_TRIGGER);
-    }
-  else if(mode==1) /* turn test trigger on */
-    {
-      vmeWrite32(&fa125p[id]->main.csr,
-		 vmeRead32(&fa125p[id]->main.csr) | FA125_MAIN_CSR_TEST_TRIGGER);
-    }
-  FA125UNLOCK;
-
-  return OK;
-}
-#endif /* DOESNOTEXIST */
-
 /*******************************************************************************
  *
  * fa125SetLTC2620 - Set DAC value of a specific channel on the LTC2620
@@ -2051,6 +2010,30 @@ fa125Enable(int id)
 }
 
 int
+fa125Disable(int id)
+{
+  int ife=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  for(ife=0; ife<12; ife++)
+    {
+      vmeWrite32(&fa125p[id]->fe[ife].test, 0);
+    }
+  FA125UNLOCK;
+
+  printf("%s(%2d): DISABLED\n",__FUNCTION__,id);
+
+  return OK;
+}
+
+int
 fa125Reset(int id, int reset)
 {
   if(id==0) id=fa125ID[0];
@@ -2080,6 +2063,26 @@ fa125Reset(int id, int reset)
   vmeWrite32(&fa125p[id]->main.blockCSR, 0);
   FA125UNLOCK;
 
+  return OK;
+}
+
+int
+fa125ResetCounters(int id)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.trig_count,FA125_PROC_TRIGCOUNT_RESET);
+  vmeWrite32(&fa125p[id]->proc.clock125_count,FA125_PROC_CLOCK125COUNT_RESET);
+  vmeWrite32(&fa125p[id]->proc.sync_count,FA125_PROC_SYNCCOUNT_RESET);
+  vmeWrite32(&fa125p[id]->proc.trig2_count,FA125_PROC_TRIG2COUNT_RESET);
+  FA125UNLOCK;
   return OK;
 }
 
@@ -2276,6 +2279,7 @@ fa125SoftPulser(int id, int output)
  *  @brief Setup fADC125 Progammable Pulse Generator
  *
  *  @param id Slot number
+ *  @param fe_chip Front End FPGA to write to
  *  @param sdata  Array of sample data to be programmed
  *  @param nsamples Number of samples contained in sdata
  *
@@ -2283,10 +2287,9 @@ fa125SoftPulser(int id, int output)
  *  @return OK if successful, otherwise ERROR.
  */
 int
-fa125SetPPG(int id, unsigned short *sdata, int nsamples)
+fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples)
 {
-  // FIXME... this still needs ported from fa250 to fa125
-  int ii, diff;
+  int ii;
   unsigned short rval;
 
   if(id==0) id=fa125ID[0];
@@ -2303,36 +2306,39 @@ fa125SetPPG(int id, unsigned short *sdata, int nsamples)
       return(ERROR);
     }
 
-  /*Defaults */
-  if((nsamples <= 0)||(nsamples>FA125_PPG_MAX_SAMPLES)) nsamples = FA125_PPG_MAX_SAMPLES;
-  diff = FA125_PPG_MAX_SAMPLES - nsamples;
+  if((nsamples <= 0)||(nsamples>FA125_PPG_MAX_SAMPLES)) 
+    {
+      logMsg("fa125SetPPG: WARN: Invalid nsamples (%d).  Setting to %d\n",
+	     nsamples, FA125_PPG_MAX_SAMPLES);
+      nsamples = FA125_PPG_MAX_SAMPLES;
+    }
 
   FA125LOCK;
   for(ii=0;ii<(nsamples-2);ii++) 
     {
-      vmeWrite32(&fa125p[id]->fe[0].test_waveform, 
+      vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 		 (sdata[ii]|FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA));
-      rval = vmeRead32(&fa125p[id]->fe[0].test_waveform);
+      rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
       if( (rval&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK) != sdata[ii])
-	logMsg("faSetPPG: ERROR: Write error %x != %x (ii=%d)\n",rval, sdata[ii],ii,4,5,6);
+	logMsg("faSetPPG: ERROR: Write error (%d) %x != %x (ii=%d)\n",
+	       ii,rval, sdata[ii],ii,4,5,6);
 
     }
 
-  vmeWrite32(&fa125p[id]->fe[0].test_waveform, 
+  /* Write the last two samples without the write flag */
+  vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 	     (sdata[(nsamples-2)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
-  rval = vmeRead32(&fa125p[id]->fe[0].test_waveform);
+  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
   if(rval != sdata[(nsamples-2)])
-	logMsg("faSetPPG: ERROR: Write error %x != %x\n",
+    logMsg("faSetPPG: ERROR: Write error (%d) %x != %x\n",nsamples-2,
 	       rval, sdata[nsamples-2],3,4,5,6);
-  vmeWrite32(&fa125p[id]->fe[0].test_waveform, 
+
+  vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 	     (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
-  rval = vmeRead32(&fa125p[id]->fe[0].test_waveform);
+  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
   if(rval != sdata[(nsamples-1)])
-	logMsg("faSetPPG: ERROR: Write error %x != %x\n",
+    logMsg("faSetPPG: ERROR: Write error (%d) %x != %x\n",nsamples-1,
 	       rval, sdata[nsamples-1],3,4,5,6);
-    
-/*   vmeWrite32(&fa125p[id]->fe[0].test_waveform, (sdata[(nsamples-2)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK)); */
-/*   vmeWrite32(&fa125p[id]->fe[0].test_waveform, (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK)); */
     
   FA125UNLOCK;
   
@@ -2995,7 +3001,7 @@ fa125DecodeData(unsigned int data)
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
 	      fadc_data.width = (data & 0xFFF);
 	      if( i_print ) 
-		printf("%8X - WINDOW RAW DATA - chan = %d   width = %d\n", 
+		printf("%8X - WINDOW RAW DATA - chan = %2d   width = %d\n", 
 		       data, fadc_data.chan, fadc_data.width);
 	      nsamples=0;
 	    }    
@@ -3010,7 +3016,7 @@ fa125DecodeData(unsigned int data)
 	      if( data & 0x2000 )
 		fadc_data.valid_2 = 0;
 	      if( i_print ) 
-		printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %d (%X)  valid = %d  adc = %d (%X)\n", 
+		printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %4d (%03X)  valid = %d  adc = %4d (%03X)\n", 
 		       data, nsamples,fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
 		       fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
 	      nsamples += 2;

@@ -148,6 +148,7 @@ struct fa125_a32
 #define FA125_BLOCKCSR_PULSE_SOFT_RESET (1<<8)
 #define FA125_BLOCKCSR_PULSE_HARD_RESET (1<<9)
 
+
 /* 0x44 ctrl1 register definitions */
 #define FA125_CTRL1_ENABLE_BERR           (1<<2)
 #define FA125_CTRL1_ENABLE_MULTIBLOCK     (1<<3)
@@ -220,7 +221,7 @@ struct fa125_a32
 #define FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK  0x00000FFF
 #define FA125_FE_TEST_WAVEFORM_OVERFLOW       (1<<12)
 #define FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA (1<<15)
-#define FA125_PPG_MAX_SAMPLES                 32
+#define FA125_PPG_MAX_SAMPLES                 32*6
 
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
@@ -356,9 +357,9 @@ typedef enum
 #define FA125_MAX_NP          3
 
 /* Processing Modes */
+#define FA125_PROC_MODE_RAWWINDOW          1
 #define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW
 #define FA125_SUPPORTED_NMODES 1
-#define FA125_PROC_MODE_RAWWINDOW  1
 
 extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
 
@@ -384,9 +385,6 @@ int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
-#ifdef DOESNOTEXIST
-int  fa125SetTestTrigger (int id, int mode);
-#endif
 int  fa125SetLTC2620(int id, int dacChan, int dacData);
 int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
@@ -411,7 +409,9 @@ int  fa125Poll(int id);
 unsigned int fa125GetBerrCount();
 int  fa125Clear(int id);
 int  fa125Enable(int id);
+int  fa125Disable(int id);
 int  fa125Reset(int id, int reset);
+int  fa125ResetCounters(int id);
 int  fa125ResetToken(int id);
 int  fa125GetTokenMask();
 int  fa125SetBlocklevel(int id, int blocklevel);
@@ -419,7 +419,7 @@ int  fa125SoftTrigger(int id);
 int  fa125SetPulserTriggerDelay(int id, int delay);
 int  fa125SetPulserWidth(int id, int width);
 int  fa125SoftPulser(int id, int output);
-int  fa125SetPPG(int id, unsigned short *sdata, int nsamples);
+int  fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples);
 int  fa125PPGEnable(int id);
 int  fa125PPGDisable(int id);
 int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);

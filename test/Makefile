@@ -42,6 +42,6 @@ clean distclean:
 	@rm -f $(PROGS) *~ *.so
 
 %: %.c
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125 -lti -lts -lsd -lctp
+	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125 -lti -lts -lsd -lctp -lf1tm
 
 .PHONY: all clean distclean
