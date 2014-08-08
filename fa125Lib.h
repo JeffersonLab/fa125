@@ -73,7 +73,9 @@ struct fa125_a24_fe
   /* 0xN070 */ volatile UINT32 threshold[6];
   /* 0xN088 */ volatile UINT32 config1;
   /* 0xN08C */ volatile UINT32 trig_count;
-  /* 0xN090 */          UINT32 blank2[(0x1000-0x90)/4];
+  /* 0xN090 */ volatile UINT32 config2;
+  /* 0xN094 */ volatile UINT32 test_waveform;
+  /* 0xN098 */          UINT32 blank2[(0x1000-0x98)/4];
 };
 
 struct fa125_a24_proc 
@@ -89,6 +91,8 @@ struct fa125_a24_proc
   /* 0xD020 */ volatile UINT32 clock125_count;
   /* 0xD024 */ volatile UINT32 sync_count;
   /* 0xD028 */ volatile UINT32 trig2_count;
+  /* 0xD02C */ volatile UINT32 pulser_control;
+  /* 0xD030 */ volatile UINT32 pulser_trig_delay;
 };
 
 struct fa125_a24 
@@ -106,9 +110,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010101
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010101
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00010101
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010201
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010201
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00010201
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -143,6 +147,7 @@ struct fa125_a32
 #define FA125_BLOCKCSR_PULSE_TRIGGER    (1<<7)
 #define FA125_BLOCKCSR_PULSE_SOFT_RESET (1<<8)
 #define FA125_BLOCKCSR_PULSE_HARD_RESET (1<<9)
+
 
 /* 0x44 ctrl1 register definitions */
 #define FA125_CTRL1_ENABLE_BERR           (1<<2)
@@ -209,6 +214,15 @@ struct fa125_a32
 /* 0xN08C FE trig_count definitions */
 #define FA125_FE_TRIG_COUNT_MASK  0x0000FFFF
 
+/* 0xN090 FE config2 definitions */
+#define FA125_FE_CONFIG2_CH_MASK  0x0000003F
+
+/* 0xN094 FE test_waveform definitions */
+#define FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK  0x00000FFF
+#define FA125_FE_TEST_WAVEFORM_OVERFLOW       (1<<12)
+#define FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA (1<<15)
+#define FA125_PPG_MAX_SAMPLES                 32*6
+
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
 #define FA125_PROC_CSR_CLEAR              (1<<1)
@@ -249,6 +263,14 @@ struct fa125_a32
 /* 0xD028 proc trig2_count register definitions */
 #define FA125_PROC_TRIG2COUNT_MASK  0xFFFFFFFF
 #define FA125_PROC_TRIG2COUNT_RESET 0
+
+/* 0xD02C pulser_control register definitions */
+#define FA125_PROC_PULSER_CONTROL_PULSE            (1<<0)
+#define FA125_PROC_PULSER_CONTROL_DELAYED_TRIGGER  (1<<1)
+
+/* 0xD030 pulser_trig_delay register definitions */
+#define FA125_PROC_PULSER_TRIG_DELAY_MASK   0x00000FFF
+#define FA125_PROC_PULSER_WIDTH_MASK        0x00FFF000
 
 /* Define data types and masks */
 #define FA125_DATA_FORMAT0     (0<<13)
@@ -335,9 +357,9 @@ typedef enum
 #define FA125_MAX_NP          3
 
 /* Processing Modes */
+#define FA125_PROC_MODE_RAWWINDOW          1
 #define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW
 #define FA125_SUPPORTED_NMODES 1
-#define FA125_PROC_MODE_RAWWINDOW  1
 
 extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
 
@@ -363,15 +385,16 @@ int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
-#ifdef DOESNOTEXIST
-int  fa125SetTestTrigger (int id, int mode);
-#endif
 int  fa125SetLTC2620(int id, int dacChan, int dacData);
 int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
 unsigned short fa125ReadOffset(int id, int chan);
 int  fa125ReadOffsetToFile(int id, char *filename);
 int  fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan);
+int  fa125SetChannelDisable(int id, int channel);
+int  fa125SetChannelDisableMask(int id, unsigned int cmask0, unsigned int cmask1, unsigned int cmask2);
+int  fa125SetChannelEnable(int id, int channel);
+int  fa125SetChannelEnableMask(int id, unsigned int cmask0, unsigned int cmask1, unsigned int cmask2);
 int  fa125SetCommonThreshold(int id, unsigned short tvalue);
 void fa125GSetCommonThreshold(unsigned short tvalue);
 int  fa125PrintThreshold(int id);
@@ -386,11 +409,19 @@ int  fa125Poll(int id);
 unsigned int fa125GetBerrCount();
 int  fa125Clear(int id);
 int  fa125Enable(int id);
+int  fa125Disable(int id);
 int  fa125Reset(int id, int reset);
+int  fa125ResetCounters(int id);
 int  fa125ResetToken(int id);
 int  fa125GetTokenMask();
 int  fa125SetBlocklevel(int id, int blocklevel);
 int  fa125SoftTrigger(int id);
+int  fa125SetPulserTriggerDelay(int id, int delay);
+int  fa125SetPulserWidth(int id, int width);
+int  fa125SoftPulser(int id, int output);
+int  fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples);
+int  fa125PPGEnable(int id);
+int  fa125PPGDisable(int id);
 int  fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag);
 int  fa125Bready(int id);
 unsigned int fa125GBready();

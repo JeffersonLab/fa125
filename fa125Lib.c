@@ -189,6 +189,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 #else
   res = vmeBusToLocalAdrs(0x39,(char *)fa125AddrList[0],(char **)&laddr);
 #endif
+
   if (res != 0) 
     {
 #ifdef VXWORKS
@@ -328,7 +329,6 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	    }
 	  nfa125++;
 	}
-
     }
 
   if(noBoardInit)
@@ -1157,47 +1157,6 @@ fa125PowerOn (int id)
   return OK;
 }
 
-#ifdef DOESNOTEXIST
-/*******************************************************************************
- *
- * fa125SetTestTrigger - Enable/Disable internal pulser trigger
- *
- */
-
-int
-fa125SetTestTrigger (int id, int mode)
-{
-  if(id==0) id=fa125ID[0];
-  
-  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
-    {
-      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
-      return ERROR;
-    }
-
-  if(mode < 0 || mode >1)
-    {
-      printf("%s: ERROR: Invalid mode = %d\n",__FUNCTION__,mode);
-      return ERROR;
-    }
-
-  FA125LOCK;
-  if(mode==0) /* turn test trigger off */
-    {
-      vmeWrite32(&fa125p[id]->main.csr,
-		 vmeRead32(&fa125p[id]->main.csr) & ~FA125_MAIN_CSR_TEST_TRIGGER);
-    }
-  else if(mode==1) /* turn test trigger on */
-    {
-      vmeWrite32(&fa125p[id]->main.csr,
-		 vmeRead32(&fa125p[id]->main.csr) | FA125_MAIN_CSR_TEST_TRIGGER);
-    }
-  FA125UNLOCK;
-
-  return OK;
-}
-#endif /* DOESNOTEXIST */
-
 /*******************************************************************************
  *
  * fa125SetLTC2620 - Set DAC value of a specific channel on the LTC2620
@@ -1441,6 +1400,167 @@ fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan)
   FA125UNLOCK;
 
   return(OK);
+}
+
+int
+fa125SetChannelDisable(int id, int channel)
+{
+  int feChip=0, feChan=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetChannelDisable: ERROR : FA125 in slot %d is not initialized \n",
+	     id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if((channel<0) || (channel>=FA125_MAX_ADC_CHANNELS))
+    {
+      logMsg("faSetChannelDisable: ERROR: Invalid channel (%d).  Must be 0-%d\n",
+	     channel, FA125_MAX_ADC_CHANNELS-1,3,4,5,6);
+      return ERROR;
+    }
+
+  feChip = (int)(channel/6);
+  feChan = (int)(channel%6);
+
+  FA125LOCK;
+  chipMask = (vmeRead32(&fa125p[id]->fe[feChip].config2) & FA125_FE_CONFIG2_CH_MASK) 
+    | (1<<feChan);
+  vmeWrite32(&fa125p[id]->fe[feChip].config2,chipMask);
+  FA125UNLOCK;
+
+  return(OK);
+}
+
+int
+fa125SetChannelDisableMask(int id, unsigned int cmask0, 
+			   unsigned int cmask1, unsigned int cmask2)
+{
+  int ichip=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetChannelDisableMask: ERROR : FA125 in slot %d is not initialized \n",
+	     id,0,0,0,0,0);
+      return(ERROR);
+    }
+  
+  if((cmask0 > 0xFFFFFF) || (cmask1 > 0xFFFFFF) || (cmask2 > 0xFFFFFF))
+    {
+      logMsg("fa125SetChannelDisableMask: ERROR : Invalid channel mask(s) (0x%08x, 0x%08x, 0x%08x).\n",
+	     cmask0,cmask1,cmask2,0,0,0);
+      logMsg("                          : Each mask must be less than 24 bits.\n",
+	     0,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  FA125LOCK;
+  for(ichip=0; ichip<4; ichip++)
+    {
+      chipMask = (cmask0>>(ichip*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=4; ichip<8; ichip++)
+    {
+      chipMask = (cmask1>>((ichip-4)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=8; ichip<12; ichip++)
+    {
+      chipMask = (cmask2>>((ichip-8)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125SetChannelEnable(int id, int channel)
+{
+  int feChip=0, feChan=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("faSetChannelEnable: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  if((channel<0) || (channel>=FA125_MAX_ADC_CHANNELS))
+    {
+      logMsg("faSetChannelEnable: ERROR: Invalid channel (%d).  Must be 0-%d\n",
+	     channel, FA125_MAX_ADC_CHANNELS-1,3,4,5,6);
+      return ERROR;
+    }
+
+
+  feChip = (int)(channel/6);
+  feChan = (int)(channel%6);
+
+  FA125LOCK;
+  chipMask = (vmeRead32(&fa125p[id]->fe[feChip].config2) & FA125_FE_CONFIG2_CH_MASK) 
+    & ~(1<<feChan);
+
+  vmeWrite32(&fa125p[id]->fe[feChip].config2,chipMask);
+  FA125UNLOCK;
+  
+  return OK;
+}
+
+int
+fa125SetChannelEnableMask(int id, unsigned int cmask0, 
+			  unsigned int cmask1, unsigned int cmask2)
+{
+  int ichip=0;
+  unsigned int chipMask=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetChannelEnableMask: ERROR : FA125 in slot %d is not initialized \n",
+	     id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if((cmask0 > 0xFFFFFF) || (cmask1 > 0xFFFFFF) || (cmask2 > 0xFFFFFF))
+    {
+      logMsg("fa125SetChannelEnableMask: ERROR : Invalid channel mask(s) (0x%08x, 0x%08x, 0x%08x).\n",
+	     cmask0,cmask1,cmask2,0,0,0);
+      logMsg("                          : Each mask must be less than 24 bits.\n",
+	     0,0,0,0,0,0);
+      return(ERROR);
+    }
+  
+  cmask0 = (~cmask0) & 0xFFFFFF;
+  cmask1 = (~cmask1) & 0xFFFFFF;
+  cmask2 = (~cmask2) & 0xFFFFFF;
+
+  FA125LOCK;
+  for(ichip=0; ichip<4; ichip++)
+    {
+      chipMask = (cmask0>>(ichip*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=4; ichip<8; ichip++)
+    {
+      chipMask = (cmask1>>((ichip-4)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  for(ichip=8; ichip<12; ichip++)
+    {
+      chipMask = (cmask2>>((ichip-8)*6)) & FA125_FE_CONFIG2_CH_MASK;
+      vmeWrite32(&fa125p[id]->fe[ichip].config2,chipMask);
+    }
+  FA125UNLOCK;
+
+  return OK;
 }
 
 int
@@ -1890,6 +2010,30 @@ fa125Enable(int id)
 }
 
 int
+fa125Disable(int id)
+{
+  int ife=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  for(ife=0; ife<12; ife++)
+    {
+      vmeWrite32(&fa125p[id]->fe[ife].test, 0);
+    }
+  FA125UNLOCK;
+
+  printf("%s(%2d): DISABLED\n",__FUNCTION__,id);
+
+  return OK;
+}
+
+int
 fa125Reset(int id, int reset)
 {
   if(id==0) id=fa125ID[0];
@@ -1919,6 +2063,26 @@ fa125Reset(int id, int reset)
   vmeWrite32(&fa125p[id]->main.blockCSR, 0);
   FA125UNLOCK;
 
+  return OK;
+}
+
+int
+fa125ResetCounters(int id)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("%s: ERROR : FA125 in slot %d is not initialized \n",(int)__FUNCTION__,id,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.trig_count,FA125_PROC_TRIGCOUNT_RESET);
+  vmeWrite32(&fa125p[id]->proc.clock125_count,FA125_PROC_CLOCK125COUNT_RESET);
+  vmeWrite32(&fa125p[id]->proc.sync_count,FA125_PROC_SYNCCOUNT_RESET);
+  vmeWrite32(&fa125p[id]->proc.trig2_count,FA125_PROC_TRIG2COUNT_RESET);
+  FA125UNLOCK;
   return OK;
 }
 
@@ -1989,6 +2153,245 @@ fa125SoftTrigger(int id)
   FA125LOCK;
   vmeWrite32(&fa125p[id]->proc.softtrig, 1);
   vmeWrite32(&fa125p[id]->proc.softtrig, 0);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ * @ingroup PulserConfig
+ * @brief Set the delay between the output pulse and f1TDC trigger
+ *
+ *  @param id 
+ *   - Slot Number
+ *
+ */
+int
+fa125SetPulserTriggerDelay(int id, int delay)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetPulserTriggerDelay: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  if(delay>FA125_PROC_PULSER_TRIG_DELAY_MASK)
+    {
+      logMsg("fa125SetPulserTriggerDelay: ERROR: delay (%d) out of range.  Must be <= %d",
+	     delay,FA125_PROC_PULSER_TRIG_DELAY_MASK,3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.pulser_trig_delay, 
+	     (vmeRead32(&fa125p[id]->proc.pulser_trig_delay) &~ FA125_PROC_PULSER_TRIG_DELAY_MASK)
+	      | delay);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+int
+fa125SetPulserWidth(int id, int width)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetPulserWidth: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  if(width>(FA125_PROC_PULSER_WIDTH_MASK>>12))
+    {
+      logMsg("fa125SetPulserWidth: ERROR: width (%d) out of range.  Must be <= %d",
+	     width,(FA125_PROC_PULSER_WIDTH_MASK>>12),3,4,5,6);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.pulser_trig_delay, 
+	     (vmeRead32(&fa125p[id]->proc.pulser_trig_delay) &~ FA125_PROC_PULSER_WIDTH_MASK)
+	     | (width<<12));
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ * @ingroup PulserConfig
+ * @brief Trigger the pulser
+ *
+ *  @param id 
+ *   - Slot Number
+ * @param output
+ *   - 0: Pulse out only
+ *   - 1: fa125 Trigger only
+ *   - 2: Both pulse and trigger
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SoftPulser(int id, int output)
+{
+  unsigned int selection=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SoftPulser: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  switch(output)
+    {
+    case 0: /* Just the pulse out */
+      selection = FA125_PROC_PULSER_CONTROL_PULSE;
+      break;
+
+    case 1: /* Just the trigger out */
+      selection = FA125_PROC_PULSER_CONTROL_DELAYED_TRIGGER;
+      break;
+
+    case 2: /* Pulse and trigger out */
+      selection = FA125_PROC_PULSER_CONTROL_PULSE 
+	| FA125_PROC_PULSER_CONTROL_DELAYED_TRIGGER;
+      break;
+
+    default:
+      logMsg("fa125SoftPulser: ERROR: Invalid output option (%d)",
+	     output,2,3,4,5,6);
+      return ERROR;
+    }
+
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.pulser_control, selection);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+
+/**
+ *  @ingroup Config
+ *  @brief Setup fADC125 Progammable Pulse Generator
+ *
+ *  @param id Slot number
+ *  @param fe_chip Front End FPGA to write to
+ *  @param sdata  Array of sample data to be programmed
+ *  @param nsamples Number of samples contained in sdata
+ *
+ *  @sa fa125PPGEnable fa125PPGDisable
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples)
+{
+  int ii;
+  unsigned short rval;
+
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125SetPPG: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if(sdata == NULL) 
+    {
+      logMsg("fa125SetPPG: ERROR: Invalid Pointer to sample data\n",1,2,3,4,5,6);
+      return(ERROR);
+    }
+
+  if((nsamples <= 0)||(nsamples>FA125_PPG_MAX_SAMPLES)) 
+    {
+      logMsg("fa125SetPPG: WARN: Invalid nsamples (%d).  Setting to %d\n",
+	     nsamples, FA125_PPG_MAX_SAMPLES);
+      nsamples = FA125_PPG_MAX_SAMPLES;
+    }
+
+  FA125LOCK;
+  for(ii=0;ii<(nsamples-2);ii++) 
+    {
+      vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
+		 (sdata[ii]|FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA));
+      rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
+      if( (rval&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK) != sdata[ii])
+	logMsg("faSetPPG: ERROR: Write error (%d) %x != %x (ii=%d)\n",
+	       ii,rval, sdata[ii],ii,4,5,6);
+
+    }
+
+  /* Write the last two samples without the write flag */
+  vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
+	     (sdata[(nsamples-2)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
+  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
+  if(rval != sdata[(nsamples-2)])
+    logMsg("faSetPPG: ERROR: Write error (%d) %x != %x\n",nsamples-2,
+	       rval, sdata[nsamples-2],3,4,5,6);
+
+  vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
+	     (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
+  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
+  if(rval != sdata[(nsamples-1)])
+    logMsg("faSetPPG: ERROR: Write error (%d) %x != %x\n",nsamples-1,
+	       rval, sdata[nsamples-1],3,4,5,6);
+    
+  FA125UNLOCK;
+  
+  return(OK);
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Enable the programmable pulse generator
+ *  @param id Slot number
+ *  @sa fa125SetPPG fa125PPGDisable
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125PPGEnable(int id)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125PPGEnable: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->fe[0].config1, 
+	     vmeRead32(&fa125p[id]->fe[0].config1) | FA125_FE_CONFIG1_PLAYBACK_ENABLE);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Disable the programmable pulse generator
+ *  @param id Slot number
+ *  @sa fa125SetPPG fa125PPGEnable
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125PPGDisable(int id)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("fa125PPGDisable: ERROR : ADC in slot %d is not initialized \n",id,0,0,0,0,0);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->fe[0].config1, 
+	     vmeRead32(&fa125p[id]->fe[0].config1) & ~FA125_FE_CONFIG1_PLAYBACK_ENABLE);
   FA125UNLOCK;
 
   return OK;
@@ -2598,7 +3001,7 @@ fa125DecodeData(unsigned int data)
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
 	      fadc_data.width = (data & 0xFFF);
 	      if( i_print ) 
-		printf("%8X - WINDOW RAW DATA - chan = %d   width = %d\n", 
+		printf("%8X - WINDOW RAW DATA - chan = %2d   width = %d\n", 
 		       data, fadc_data.chan, fadc_data.width);
 	      nsamples=0;
 	    }    
@@ -2613,7 +3016,7 @@ fa125DecodeData(unsigned int data)
 	      if( data & 0x2000 )
 		fadc_data.valid_2 = 0;
 	      if( i_print ) 
-		printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %d (%X)  valid = %d  adc = %d (%X)\n", 
+		printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %4d (%03X)  valid = %d  adc = %4d (%03X)\n", 
 		       data, nsamples,fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
 		       fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
 	      nsamples += 2;
