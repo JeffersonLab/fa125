@@ -1,4 +1,7 @@
- /*----------------------------------------------------------------------------*
+/*----------------------------------------------------------------------------*/
+/**
+ * @mainpage
+ * <pre>
  *  Copyright (c) 2010        Southeastern Universities Research Association, *
  *                            Thomas Jefferson National Accelerator Facility  *
  *                                                                            *
@@ -19,7 +22,7 @@
  * Description:
  *     Driver library for readout of the 125MSPS ADC using vxWorks 5.5 
  *     (or later) or Intel based single board computer
- *
+ * </pre>
  *----------------------------------------------------------------------------*/
 
 #include <string.h>
@@ -53,7 +56,7 @@ pthread_mutex_t    fa125Mutex = PTHREAD_MUTEX_INITIALIZER;
 #define FA125UNLOCK   if(pthread_mutex_unlock(&fa125Mutex)<0) perror("pthread_mutex_unlock");
 
 /* Define global variables */
-int nfa125=0;
+int nfa125=0; /* Number of initialized modules */
 volatile struct fa125_a24 *fa125p[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 memory map */
 volatile struct fa125_a32 *fa125pd[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 FIFO memory */
 volatile unsigned int *FA125pmb;                        /* pointer to Multblock window */
@@ -70,11 +73,29 @@ int berr_count=0; /* A count of the number of BERR that have occurred when runni
 static unsigned short fa125dacOffset[FA125_MAX_BOARDS+1][72];
 int fa125BlockError=FA125_BLOCKERROR_NO_ERROR;       /* Whether (1) or not (0) Block Transfer had an error */
 
-/*******************************************************************************
+/**
+ * @defgroup Config Initialization/Configuration
+ * @defgroup PulserConfig Pulser Initialization/Configuration
+ *   @ingroup Config
+ * @defgroup Status Status
+ * @defgroup Readout Data Readout
+ * @defgroup FWUpdate Firmware Updating Utilities
+ * @defgroup Deprec Deprecated - To be removed
+ */
+
+/**
+ *  @ingroup Config
+ *  @brief Initialize the fa125 Library
  *
- * fa125Init - Initialize the fa125 Library
+ * @param addr
+ *  - A24 VME Address of the fADC125
+ * @param addr_inc
+ *  - Amount to increment addr to find the next fADC125
+ * @param nadc
+ *  - Number of times to increment
  *
- *   iFlag: 17 bit integer
+ * @param iFlag 17 bit integer
+ * <pre>
  *       Low 6 bits - Specifies the default Signal distribution (clock,trigger) 
  *                    sources for the board (Internal, FrontPanel, VXS, VME(Soft))
  *       bit    0:  defines Sync Reset source
@@ -90,22 +111,19 @@ int fa125BlockError=FA125_BLOCKERROR_NO_ERROR;       /* Whether (1) or not (0) B
  *           (0) 0 0  P2 Connector (Backplane)
  *           (1) 0 1  VXS (P0)
  *           (2) 1 0  Internal 125MHz Clock
- *
- *     16:  Exit before board initialization (just map structure pointer)
- *          0: Initialize fa125(s)
- *          1: Skip initialization
- *
- *     17:  Use fa125AddrList instead of addr and addr_inc
- *           for VME addresses.
- *          0: Initialize with addr and addr_inc
- *          1: Use fa125AddrList 
- *
- *     18:  Skip firmware check.  Useful for firmware updating.
- *             0 Perform firmware check
- *             1 Skip firmware check
- *
+ *       bit   16:  Exit before board initialization (just map structure pointer)
+ *                 0: Initialize fa125(s)
+ *                 1: Skip initialization
+ *       bit   17:  Use fa125AddrList instead of addr and addr_inc
+ *                  for VME addresses.
+ *                 0: Initialize with addr and addr_inc
+ *                 1: Use fa125AddrList 
+ *       bit   18:  Skip firmware check.  Useful for firmware updating.
+ *                 0: Perform firmware check
+ *                 :1 Skip firmware check
+ * </pre>
+ * @return OK, or ERROR if the address is invalid or a board is not present.
  */
-
 int
 fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 {
@@ -503,16 +521,16 @@ fa125CheckAddresses(int id)
 }
 
 
-/*******************************************************************************
- *
- * fa125Slot - Convert an index into a slot number, where the index is
- *          the element of an array of FA125s in the order in which they were
+/**
+ *  @ingroup Config
+ *  @brief Convert an index into a slot number, where the index is
+ *          the element of an array of fA125s in the order in which they were
  *          initialized.
  *
- * RETURNS: Slot number if Successfull, otherwise ERROR.
+ * @param i Initialization number
+ * @return Slot number if Successfull, otherwise ERROR.
  *
  */
-
 int
 fa125Slot(unsigned int i)
 {
@@ -526,6 +544,14 @@ fa125Slot(unsigned int i)
   return fa125ID[i];
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Print Status of fADC125 to standard out
+ *  @param id Slot Number
+ *  @param pflag Print option flag
+ *    - bit   0 (FA125_STATUS_SHOWREGS): Show some register values to standard out
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125Status(int id, int pflag)
 {
@@ -750,6 +776,11 @@ fa125Status(int id, int pflag)
 
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Print a summary of all initialized fADC1250s
+ *  @param pflag Not used
+*/
 void
 fa125GStatus(int pflag)
 {
@@ -967,13 +998,30 @@ fa125GStatus(int pflag)
 
 }
 
-
-/***********************
+/**
+ *  @ingroup Config
+ *  @brief Configure the processing type/mode
  *
- *  faSetProcMode - Setup ADC processing modes.
+ *  @param id Slot number
+ *  @param pmode  Processing Mode
+ *     -     1 - Raw Window
+ *     -     2 - Pulse Raw Window      (not supported)
+ *     -     3 - Pulse Integral        (not supported)
+ *     -     4 - High-resolution time  (not supported)
+ *     -     7 - Mode 3 + Mode 4       (not supported)
+ *     -     8 - Mode 1 + Mode 4       (not supported)
+ *  @param  PL  Window Latency
+ *  @param PTW  Window Width
+ *  @param NSB  Number of samples before pulse over threshold
+ *  @param NSA  Number of samples after pulse over threshold
+ *  @param NP   Number of pulses processed per window
  *
+ *    Note:
+ *     - PL must be greater than PTW
+ *     - NSA+NSB must be an odd number
+ *
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW, 
 		 unsigned int NSB, unsigned int NSA, unsigned int NP)
@@ -1050,6 +1098,15 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
   return OK;
 }
 
+/**
+ *  @ingroup Deprec
+ *  @brief Enable/Disable onboard byteswapping
+ *  @param id Slot number
+ *  @param enable 
+ *      - 0: Disable
+ *      - 1: Enable
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetByteSwap(int id, int enable)
 {
@@ -1072,12 +1129,12 @@ fa125SetByteSwap(int id, int enable)
 }
 
 
-/*******************************************************************************
- *
- * fa125PowerOff - Power Off the 125MSPS ADC
- *
+/**
+ *  @ingroup Config
+ *  @brief Power Off the fADC125
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125PowerOff (int id) 
 {
@@ -1111,12 +1168,12 @@ fa125PowerOff (int id)
   return OK;
 }
 
-/*******************************************************************************
- *
- * fa125PowerOn - Power On the 125MSPS ADC
- *
+/**
+ *  @ingroup Config
+ *  @brief Power On the fADC125
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125PowerOn (int id) 
 {
@@ -1157,13 +1214,15 @@ fa125PowerOn (int id)
   return OK;
 }
 
-/*******************************************************************************
- *
- * fa125SetLTC2620 - Set DAC value of a specific channel on the LTC2620
- *
+/**
+ *  @ingroup Config
+ *  @brief Set DAC value of a specific channel
+ *  @param id Slot number
+ *  @param dacChan
+ *  @param dacData
+ *  @return OK if successful, otherwise ERROR.
  */
-
-int
+static int
 fa125SetLTC2620 (int id, int dacChan, int dacData) 
 {
   UINT32 sdat[5]={0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff};
@@ -1214,12 +1273,14 @@ fa125SetLTC2620 (int id, int dacChan, int dacData)
 }
 
 
-/*******************************************************************************
- *
- * fa125SetOffset - Set the DAC offset for a specific 125MSPS Channel.
- *
+/**
+ *  @ingroup Config
+ *  @brief Set the DAC offset for a specific fADC125 Channel.
+ *  @param id Slot number
+ *  @param chan Channel Number
+ *  @param dacData DAC value to set
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetOffset (int id, int chan, int dacData) 
 {
@@ -1254,15 +1315,15 @@ fa125SetOffset (int id, int chan, int dacData)
   return rval;
 }
 
-/* fa125SetOffsetFromFile - For now... one filename per module */
-
-/*******************************************************************************
- *
- * fa125SetOffsetFromFile - Set the DAC offsets for each channel from a 
- *                           specified file.
- *
+/**
+ *  @ingroup Config
+ *  @brief Set the DAC offset for a specific fADC125 Channel from a specified file
+ *  @param id Slot number
+ *  @param filename Name of file from which to read DAC offsets 
+ *     Format must be of the type:
+ *    dac0   dac1   dac2 ...  dac71
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetOffsetFromFile(int id, char *filename)
 {
@@ -1305,6 +1366,13 @@ fa125SetOffsetFromFile(int id, char *filename)
   return OK;
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Readback the DAC offset set for a specific fADC125 Channel
+ *  @param id Slot number
+ *  @param chan Channel Number
+ *  @return DAC offset if successful, otherwise ERROR.
+ */
 unsigned short
 fa125ReadOffset(int id, int chan)
 {
@@ -1327,6 +1395,13 @@ fa125ReadOffset(int id, int chan)
 
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Readback the DAC offset set for a specific fADC125 Channel into a specified file
+ *  @param id Slot number
+ *  @param filename Filename to store all DAC offset
+ *  @return DAC offset if successful, otherwise ERROR.
+ */
 int
 fa125ReadOffsetToFile(int id, char *filename)
 {
@@ -1369,6 +1444,14 @@ fa125ReadOffsetToFile(int id, char *filename)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Set the readout threshold for a specific fADC125 Channel.
+ *  @param id Slot number
+ *  @param tvalue Threshold Value
+ *  @param chan Channel Number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan)
 {
@@ -1402,6 +1485,13 @@ fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan)
   return(OK);
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Disable a specific fADC125 Channel.
+ *  @param id Slot number
+ *  @param chan Channel Number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetChannelDisable(int id, int channel)
 {
@@ -1435,6 +1525,15 @@ fa125SetChannelDisable(int id, int channel)
   return(OK);
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Disable specific fADC125 Channels using three separate channel masks
+ *  @param id Slot number
+ *  @param cmask0 Disable channel mask for channels 0-23
+ *  @param cmask1 Disable channel mask for channels 24-47
+ *  @param cmask2 Disable channel mask for channels 48-71
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetChannelDisableMask(int id, unsigned int cmask0, 
 			   unsigned int cmask1, unsigned int cmask2)
@@ -1480,6 +1579,13 @@ fa125SetChannelDisableMask(int id, unsigned int cmask0,
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Enable a specific fADC125 Channel.
+ *  @param id Slot number
+ *  @param chan Channel Number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetChannelEnable(int id, int channel)
 {
@@ -1514,6 +1620,15 @@ fa125SetChannelEnable(int id, int channel)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Enable specific fADC125 Channels using three separate channel masks
+ *  @param id Slot number
+ *  @param cmask0 Enable channel mask for channels 0-23
+ *  @param cmask1 Enable channel mask for channels 24-47
+ *  @param cmask2 Enable channel mask for channels 48-71
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetChannelEnableMask(int id, unsigned int cmask0, 
 			  unsigned int cmask1, unsigned int cmask2)
@@ -1563,6 +1678,13 @@ fa125SetChannelEnableMask(int id, unsigned int cmask0,
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Set a common readout threshold for all fADC125 Channels.
+ *  @param id Slot number
+ *  @param tvalue Threshold Value
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetCommonThreshold(int id, unsigned short tvalue)
 {
@@ -1576,6 +1698,12 @@ fa125SetCommonThreshold(int id, unsigned short tvalue)
   return rval;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Set a common readout threshold for all fADC125 Channels for all initialized modules.
+ *  @param tvalue Threshold Value
+ *  @return OK if successful, otherwise ERROR.
+ */
 void
 fa125GSetCommonThreshold(unsigned short tvalue)
 {
@@ -1587,6 +1715,12 @@ fa125GSetCommonThreshold(unsigned short tvalue)
     }
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Print to standarad out the set readout threshold for all fADC125 Channels in the specified module.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125PrintThreshold(int id)
 {
@@ -1625,12 +1759,14 @@ fa125PrintThreshold(int id)
 }
 
 
-/*******************************************************************************
- *
- * fa125SetPulserAmplitude - ... 
- *
+/**
+ *  @ingroup Config
+ *  @brief Set the output Pulser Amplitude for the specified connector
+ *  @param id Slot number
+ *  @param chan Connector number (0-2)
+ *  @param dacData Pulser Amplitude.
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetPulserAmplitude (int id, int chan, int dacData) 
 {
@@ -1656,12 +1792,13 @@ fa125SetPulserAmplitude (int id, int chan, int dacData)
   return rval;
 }
 
-/*******************************************************************************
- *
- * fa125SetMulThreshold ...
- *
+/**
+ *  @ingroup Deprec
+ *  @brief Set the multiplicity sum for an internal trigger.
+ *  @param id Slot number
+ *  @param dacData Multiplicity sum
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetMulThreshold(int id, int dacData) 
 {
@@ -1681,13 +1818,12 @@ fa125SetMulThreshold(int id, int dacData)
   return rval;
 }
 
-/*******************************************************************************
- *
- * fa125PrintTemps - Print the temperature of the main board and mezzanine
- *                    to standard out.  Not to be used during a trigger routine.
- *
+/**
+ *  @ingroup Status
+ *  @brief Print the temperature of the main board and mezzanine to standard out.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125PrintTemps(int id)
 {
@@ -1713,17 +1849,16 @@ fa125PrintTemps(int id)
   return OK;
 }
 
-/*******************************************************************************
- *
- * fa125SetClockSource - Set the clock source
- *
- *   clksrc: defines Clock Source
+/**
+ *  @ingroup Config
+ *  @brief Set the clock source for the specified fADC125
+ *  @param id Slot number
+ *  @param clksrc Defines Clock Source
  *           0  P2 Clock
  *           1  VXS (P0)
  *           2  Internal 125MHz Clock
- *
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetClockSource(int id, int clksrc)
 {
@@ -1765,18 +1900,17 @@ fa125SetClockSource(int id, int clksrc)
   return OK;
 }
 
-/*******************************************************************************
- *
- * fa125SetTriggerSource - Set the trigger source
- *
- *   trigsrc: defines Trigger Source
+/**
+ *  @ingroup Config
+ *  @brief Set the trigger source for the specified fADC125
+ *  @param id Slot number
+ *  @param trigsrc Defines Trigger Source
  *           0  P0 (VXS)
- *           1  Internal Timer
+ *           1  Software (VME)
  *           2  Internal Sum
  *           3  P2
- *
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125SetTriggerSource(int id, int trigsrc)
 {
@@ -1798,8 +1932,8 @@ fa125SetTriggerSource(int id, int trigsrc)
 
   switch(trigsrc)
     {
-    case 1: /* Internal Timer */
-      regset = FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER;
+    case 1: /* Software */
+      regset = FA125_TRIGSRC_TRIGGER_SOFTWARE;
       break;
 
     case 2: /* Internal Sum */
@@ -1823,6 +1957,17 @@ fa125SetTriggerSource(int id, int trigsrc)
   return OK;
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Returns the trigger source for the specified fADC125
+ *  @param id Slot number
+ *  @return 
+ *          - 0  P0 (VXS)
+ *          - 1  Software
+ *          - 2  Internal Sum
+ *          - 3  P2
+ *          - ERROR  otherwise
+ */
 int
 fa125GetTriggerSource(int id)
 {
@@ -1842,6 +1987,15 @@ fa125GetTriggerSource(int id)
   return rval;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Set the Sync Reset source for the specified fADC125
+ *  @param id Slot number
+ *  @param srsrc Sync Reset source
+ *      - 0: Software (VME)
+ *      - 1: P0 (VXS)
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetSyncResetSource(int id, int srsrc)
 {
@@ -1863,7 +2017,7 @@ fa125SetSyncResetSource(int id, int srsrc)
   switch(srsrc)
     {
     case 1: /* VME (software) */
-      srsrc = FA125_TRIGSRC_TRIGGER_INTERNAL_SUM;
+      srsrc = FA125_PROC_CTRL2_SYNCRESET_VME;
       break;
 
     case 0: /* VXS (P0) */
@@ -1873,22 +2027,28 @@ fa125SetSyncResetSource(int id, int srsrc)
     }
 
   FA125LOCK;
+  /* Set source */
   vmeWrite32(&fa125p[id]->proc.ctrl2, 
 	     (vmeRead32(&fa125p[id]->proc.ctrl2) & ~FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK) | 
 	     srsrc);
+  /* Enable */
   vmeWrite32(&fa125p[id]->fe[0].test,
-	     (vmeRead32(&fa125p[id]->fe[0].test) & ~(1<<2)) |
-	     (1<<2));
+	     (vmeRead32(&fa125p[id]->fe[0].test) & ~FA125_FE_TEST_SYNCRESET_ENABLE) |
+	     FA125_FE_TEST_SYNCRESET_ENABLE);
   FA125UNLOCK;
 
   return OK;
 }
 
 
-/*******************************************************************************
- *
- * fa125Poll - Poll the 125MSPS busy status.
- *
+/**
+ *  @ingroup Readout
+ *  @brief Poll the specified fADC125's busy status.
+ *  @param id Slot number
+ *  @returns Busy status
+ *    - 0: Not Busy
+ *    - 1: Busy
+ *    - ERROR: otherwise
  */
 
 int
@@ -1948,24 +2108,24 @@ fa125Poll(int id)
 
 }
 
-/*******************************************************************************
- *
- * fa125GetBerrCount - Return the BERR count.
- *
+/**
+ *  @ingroup Readout
+ *  @brief Return the Bus Error count that occurred while checking the busy status
+ *  @return Bus Error count
+ *  @sa fa125Poll
  */
-
 unsigned int
 fa125GetBerrCount()
 {
   return berr_count;
 }
 
-/*******************************************************************************
- *
- * fa125Clear - ...
- *
+/**
+ *  @ingroup Deprec
+ *  @brief Clear used with serial acquisition buffers.  Deprecated as this is no longer the way to readout data from the module.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
  */
-
 int
 fa125Clear(int id)
 {
@@ -1985,6 +2145,12 @@ fa125Clear(int id)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Enable buffers and FIFOs for data acquisition.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125Enable(int id)
 {
@@ -2000,7 +2166,9 @@ fa125Enable(int id)
   FA125LOCK;
   for(ife=0; ife<12; ife++)
     {
-      vmeWrite32(&fa125p[id]->fe[ife].test, (1<<1));
+      vmeWrite32(&fa125p[id]->fe[ife].test, 
+		 (vmeRead32(&fa125p[id]->fe[ife].test & ~FA125_FE_TEST_COLLECT_ON) |
+		  FA125_FE_TEST_COLLECT_ON);
     }
   FA125UNLOCK;
 
@@ -2009,6 +2177,12 @@ fa125Enable(int id)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Disable buffers and FIFOs for data acquisition.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125Disable(int id)
 {
@@ -2024,7 +2198,8 @@ fa125Disable(int id)
   FA125LOCK;
   for(ife=0; ife<12; ife++)
     {
-      vmeWrite32(&fa125p[id]->fe[ife].test, 0);
+      vmeWrite32(&fa125p[id]->fe[ife].test, 
+		 (vmeRead32(&fa125p[id]->fe[ife].test & ~FA125_FE_TEST_COLLECT_ON));
     }
   FA125UNLOCK;
 
@@ -2033,6 +2208,15 @@ fa125Disable(int id)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Perform the selected Reset to a specific fADC125
+ *  @param id Slot number
+ *  @param reset Type of reset to perform
+ *     - 0: Soft Reset - Reset of all state machines and FIFOs.  Register values will remain.
+ *     - 1: Hard Reset - Soft reset + reset of all register values.
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125Reset(int id, int reset)
 {
@@ -2066,6 +2250,12 @@ fa125Reset(int id, int reset)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Reset all counters (trigger count, clock count, sync reset count, trig2 count)
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125ResetCounters(int id)
 {
@@ -2086,6 +2276,13 @@ fa125ResetCounters(int id)
   return OK;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Returns the token to the first module
+ *     This routine only has an effect on the first module of the Multiblock setup.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125ResetToken(int id)
 {
@@ -2105,6 +2302,11 @@ fa125ResetToken(int id)
   return OK;
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Return the slot mask of modules with the token.
+ *  @return Token Slot Mask if successful, otherwise ERROR.
+ */
 int
 fa125GetTokenMask()
 {
@@ -2121,6 +2323,13 @@ fa125GetTokenMask()
   return rmask;
 }
 
+/**
+ *  @ingroup Config
+ *  @brief Set the number of events in the block
+ *  @param id Slot number
+ *  @param blocklevel Number of events per block
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetBlocklevel(int id, int blocklevel)
 {
@@ -2139,6 +2348,12 @@ fa125SetBlocklevel(int id, int blocklevel)
   return OK;
 }
 
+/**
+ *  @ingroup Readout
+ *  @brief Initiate a software trigger for a specific fADC125 module.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SoftTrigger(int id)
 {
@@ -2159,12 +2374,11 @@ fa125SoftTrigger(int id)
 }
 
 /**
- * @ingroup PulserConfig
- * @brief Set the delay between the output pulse and f1TDC trigger
- *
- *  @param id 
- *   - Slot Number
- *
+ *  @ingroup PulserConfig
+ *  @brief Set the delay between the output pulse and f1TDC trigger
+ *  @param id Slot number
+ *  @param delay The number of samples of delay between the output pulse and the trigger
+ *  @return OK if successful, otherwise ERROR.
  */
 int
 fa125SetPulserTriggerDelay(int id, int delay)
@@ -2193,6 +2407,13 @@ fa125SetPulserTriggerDelay(int id, int delay)
   return OK;
 }
 
+/**
+ *  @ingroup PulserConfig
+ *  @brief Set the width of the output pulse
+ *  @param id Slot number
+ *  @param width The number of samples that make up the width of the output pulse
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125SetPulserWidth(int id, int width)
 {
@@ -2397,14 +2618,14 @@ fa125PPGDisable(int id)
   return OK;
 }
 
-/**************************************************************************************
+/**
+ *  @ingroup Deprec
+ *  @brief General Data readout routine.  Deprecated.  Replaced with fa125ReadBlock
  *
- *  fa125ReadEvent - General Data readout routine
- *
- *    id    - Slot number of module to read
- *    data  - local memory address to place data
- *    nwrds - Max number of words to transfer
- *    rflag - Readout Flag
+ *  @param id Slot number of module to read
+ *  @param data local memory address to place data
+ *  @param nwrds Maximum number of words to transfer
+ *  @param rflag - Readout Flag
  *            Bits 0-3: Readout type
  *            Bits 4-31: Specific to readout type
  *              0 - programmed I/O from the specified board
@@ -2412,8 +2633,8 @@ fa125PPGDisable(int id)
  *                  Number of samples to obtain from each channel
  *                  If input number of samples is odd, it will be
  *                  incremented by 1.
+ *  @return Number of 32bit words readout if successful, otherwise ERROR.
  */
-
 int
 fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
 {
@@ -2512,7 +2733,12 @@ fa125ReadEvent(int id, volatile UINT32 *data, int nwrds, unsigned int rflag)
   return 0;
 }
 
-
+/**
+ *  @ingroup Readout
+ *  @brief Return a Block Ready status
+ *  @param id Slot number
+ *  @return 1 if block is ready for readout, 0 if not, otherwise ERROR.
+*/
 int
 fa125Bready(int id)
 {
@@ -2532,6 +2758,11 @@ fa125Bready(int id)
   return rval;
 }
 
+/**
+ *  @ingroup Readout
+ *  @brief Return a Block Ready status mask for all initialized fADC125s
+ *  @return block ready mask, otherwise ERROR.
+*/
 unsigned int
 fa125GBready()
 {
@@ -2554,6 +2785,11 @@ fa125GBready()
   return(dmask);
 }
 
+/**
+ *  @ingroup Status
+ *  @brief Return the vme slot mask of all initialized fADC125s
+ *  @return VME Slot mask, otherwise ERROR.
+*/
 unsigned int
 fa125ScanMask()
 {
@@ -2577,6 +2813,13 @@ const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES] =
     "DmaDone(..) Error"
   };
 
+/**
+ *  @ingroup Readout
+ *  @brief Return the block error flag and optionally print out the description to standard out
+ *  @param pflag If >0 will print the error flag to standard out.
+ *  @return Block Error flag.
+ *  @sa FA125_BLOCKERROR_FLAGS
+ */
 int
 fa125ReadBlockStatus(int pflag)
 {
@@ -2593,19 +2836,22 @@ fa125ReadBlockStatus(int pflag)
 }
 
 
-/**************************************************************************************
+/**
+ *  @ingroup Readout
+ *  @brief General Data readout routine
  *
- *  fa125ReadBlock - General Data readout routine
- *
- *    id    - Slot number of module to read
- *    data  - local memory address to place data
- *    nwrds - Max number of words to transfer
- *    rflag - Readout Flag
+ *  @param  id     Slot number of module to read
+ *  @param  data   local memory address to place data
+ *  @param  nwrds  Max number of words to transfer
+ *  @param  rflag  Readout Flag
+ * <pre>
  *              0 - programmed I/O from the specified board
  *              1 - DMA transfer using Universe/Tempe DMA Engine 
  *                    (DMA VME transfer Mode must be setup prior)
  *              2 - Multiblock DMA transfer (Multiblock must be enabled
  *                     and daisychain in place or SD being used)
+ * </pre>
+ *  @return Number of words inserted into data if successful.  Otherwise ERROR.
  */
 int
 fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
@@ -2887,6 +3133,11 @@ struct data_struct
 
 volatile struct data_struct fadc_data;
 
+/**
+ *  @ingroup Status
+ *  @brief Decode a data word from an fADC125 and print to standard out.
+ *  @param data 32bit fADC125 data word
+*/
 void 
 fa125DecodeData(unsigned int data)
 {
@@ -3272,6 +3523,13 @@ static int fa125FirmwareVerifyPage(int ipage);
 static int fa125FirmwareVerifyErasedPage(int ipage);
 static int hex2num(char c);
 
+
+/**
+ *  @ingroup FWUpdate
+ *  @brief Set the debugging flags for diagnosing firmware updating problems.
+ *  @param debug Debug bit flags
+ *  @sa FA125_FIRMWARE_DEBUG_FLAGS
+ */
 void
 fa125FirmwareSetDebug(unsigned int debug)
 {
@@ -3730,6 +3988,11 @@ fa125FirmwareVerifyFull(int id)
 
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Verify that the firmware has been written correctly to all initialized fADC125s
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125FirmwareGVerifyFull()
 {
@@ -3843,6 +4106,12 @@ hex2num(char c)
   return c - '0';
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Read in the firmware from selected MCS file.
+ *  @param filename Name of file that contains the firmware in MCS format.
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125FirmwareReadMcsFile(char *filename)
 {
@@ -4020,6 +4289,10 @@ fa125FirmwareReadMcsFile(char *filename)
   return OK;
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Prints to standard out, the memory size and location of each FPGA firmware
+ */
 void
 fa125FirmwarePrintFPGAStats()
 {
@@ -4034,6 +4307,11 @@ fa125FirmwarePrintFPGAStats()
 
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Prints the selected firmware page to standard out
+ *  @param page Selected page
+ */
 void
 fa125FirmwarePrintPage(int page)
 {
@@ -4058,7 +4336,12 @@ fa125FirmwarePrintPage(int page)
 
 }
 
-
+/**
+ *  @ingroup FWUpdate
+ *  @brief Erase the entire contents of the configuration ROM of the selected fADC125
+ *  @param id Slot Number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125FirmwareEraseFull(int id)
 {
@@ -4163,6 +4446,11 @@ fa125FirmwareEraseFull(int id)
 
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Erase the entire contents of the configuration ROM for all initialized fADC125s
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125FirmwareGEraseFull()
 {
@@ -4330,6 +4618,12 @@ fa125FirmwareGEraseFull()
 
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Write the contents of the read in MCS file to the selected fADC125 Configuration ROM
+ *  @param id Slot Number
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125FirmwareWriteFull(int id)
 {
@@ -4441,6 +4735,11 @@ fa125FirmwareWriteFull(int id)
   return OK;
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Write the contents of the read in MCS file to the Configuration ROM of all initialized fADC125s
+ *  @return OK if successful, otherwise ERROR.
+ */
 int
 fa125FirmwareGWriteFull()
 {
@@ -4603,6 +4902,13 @@ fa125FirmwareGWriteFull()
   return OK;
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Print the time it took for each firmware update step to standard out.
+ *     debug = FA125_FIRMWARE_DEBUG_MEASURE_TIMES
+ *     Must be selected prior to update.
+ *  @sa fa125FirmwareSetDebug
+ */
 void
 fa125FirmwarePrintTimes()
 {
@@ -4653,6 +4959,10 @@ fa125FirmwarePrintTimes()
   printf("\n");
 }
 
+/**
+ *  @ingroup FWUpdate
+ *  @brief Print to standard out the results of the firmware update for each initialized fADC125
+ */
 int
 fa125FirmwareGCheckErrors()
 {
