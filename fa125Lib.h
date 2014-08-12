@@ -183,6 +183,10 @@ struct fa125_a32
 #define FA125_CONFIGADRDATA_PAGEADR_MASK 0x7FFC0000
 #define FA125_CONFIGADRDATA_EXEC         (1<<31)
 
+/* 0x1004 FE test definitions */
+#define FA125_FE_TEST_COLLECT_ON       (1<<1)
+#define FA125_FE_TEST_SYNCRESET_ENABLE (1<<2)
+
 /* 0x1058 FE ptw register defintions */
 #define FA125_FE_PTW_MASK          0x000000FF
 
@@ -231,16 +235,15 @@ struct fa125_a32
 /* 0xD008 proc trigsrc register definitions */
 #define FA125_TRIGSRC_TRIGGER_MASK           0x00000003
 #define FA125_TRIGSRC_TRIGGER_P0             (0<<0)
-#define FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER (1<<0)
+#define FA125_TRIGSRC_TRIGGER_SOFTWARE       (1<<0)
 #define FA125_TRIGSRC_TRIGGER_INTERNAL_SUM   (1<<1)
 #define FA125_TRIGSRC_TRIGGER_P2             ((1<<1)|(1<<0))
 
 /* 0xD00C proc ctrl2 register definitions */
 #define FA125_PROC_CTRL2_TRIGGER_ENABLE        (1<<0)
-#define FA125_PROC_CTRL2_SYNCRESET_ENABLE      (1<<1)
 #define FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK 0xC
-#define FA125_PROC_CTRL2_SYNCRESET_P0          (0)
-#define FA125_PROC_CTRL2_SYNCRESET_VME         (2)
+#define FA125_PROC_CTRL2_SYNCRESET_P0          (0<<2)
+#define FA125_PROC_CTRL2_SYNCRESET_VME         (2<<2)
 
 /* 0xD014 proc blocklevel register definitions */
 #define FA125_PROC_BLOCKLEVEL_MASK    0x0000FFFF
@@ -385,7 +388,6 @@ int  fa125Slot(unsigned int i);
 int  fa125SetByteSwap(int id, int enable);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
-int  fa125SetLTC2620(int id, int dacChan, int dacData);
 int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
 unsigned short fa125ReadOffset(int id, int chan);
