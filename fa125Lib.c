@@ -382,6 +382,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
     {
       FA_SLOT = fa125ID[islot];
 
+      fa125Reset(FA_SLOT, 1);
       fa125Clear(FA_SLOT);
 
       /* Set the clock source */
@@ -718,8 +719,8 @@ fa125Status(int id, int pflag)
   trigsrc = p.trigsrc & FA125_TRIGSRC_TRIGGER_MASK;
   if(trigsrc == FA125_TRIGSRC_TRIGGER_P0)
     printf(" P0\n");
-  else if (trigsrc == FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER)
-    printf(" Internal Timer\n");
+  else if (trigsrc == FA125_TRIGSRC_TRIGGER_SOFTWARE)
+    printf(" Software (VME)\n");
   else if (trigsrc == FA125_TRIGSRC_TRIGGER_INTERNAL_SUM)
     printf(" Internal Sum\n");
   else if (trigsrc == FA125_TRIGSRC_TRIGGER_P2)
@@ -888,7 +889,7 @@ fa125GStatus(int pflag)
 
       printf("%s  ",
 	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
-	     ==FA125_TRIGSRC_TRIGGER_INTERNAL_TIMER ? "TIMER" :
+	     ==FA125_TRIGSRC_TRIGGER_SOFTWARE ? " VME " :
 	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
 	     ==FA125_TRIGSRC_TRIGGER_INTERNAL_SUM ? " SUM " :
 	     (st[id].proc.trigsrc & FA125_TRIGSRC_TRIGGER_MASK)
@@ -960,11 +961,11 @@ fa125GStatus(int pflag)
       id = fa125Slot(ifa);
       printf(" %2d   ",id);
 
-      printf("%10d  ", st[id].proc.trig_count);
+      printf("%10d  ", st[id].proc.trig_count & FA125_PROC_TRIGCOUNT_MASK);
 
-      printf("%10d  ", st[id].proc.trig2_count);
+      printf("%10d  ", st[id].proc.trig2_count & FA125_PROC_TRIG2COUNT_MASK);
 
-      printf("%10d  ", st[id].proc.sync_count);
+      printf("%10d  ", st[id].proc.sync_count & FA125_PROC_SYNCCOUNT_MASK);
 
       printf("\n");
     }
@@ -1088,6 +1089,8 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
   vmeWrite32(&fa125p[id]->fe[0].ptw, PTW);
   vmeWrite32(&fa125p[id]->fe[0].ptw_max_buf, ptw_max_buf);
   vmeWrite32(&fa125p[id]->fe[0].ptw_last_adr, ptw_last_adr);
+  vmeWrite32(&fa125p[id]->fe[0].nsb, NSB);
+  vmeWrite32(&fa125p[id]->fe[0].nsa, NSA);
 
   /* Enable ADC processing */
   vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<5) | FA125_FE_CONFIG1_ENABLE) );
@@ -2167,7 +2170,7 @@ fa125Enable(int id)
   for(ife=0; ife<12; ife++)
     {
       vmeWrite32(&fa125p[id]->fe[ife].test, 
-		 (vmeRead32(&fa125p[id]->fe[ife].test & ~FA125_FE_TEST_COLLECT_ON) |
+		 (vmeRead32(&fa125p[id]->fe[ife].test) & ~FA125_FE_TEST_COLLECT_ON) |
 		  FA125_FE_TEST_COLLECT_ON);
     }
   FA125UNLOCK;
@@ -2199,7 +2202,7 @@ fa125Disable(int id)
   for(ife=0; ife<12; ife++)
     {
       vmeWrite32(&fa125p[id]->fe[ife].test, 
-		 (vmeRead32(&fa125p[id]->fe[ife].test & ~FA125_FE_TEST_COLLECT_ON));
+		 (vmeRead32(&fa125p[id]->fe[ife].test) & ~FA125_FE_TEST_COLLECT_ON));
     }
   FA125UNLOCK;
 
@@ -2539,27 +2542,27 @@ fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples)
     {
       vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 		 (sdata[ii]|FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA));
-      rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
-      if( (rval&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK) != sdata[ii])
-	logMsg("faSetPPG: ERROR: Write error (%d) %x != %x (ii=%d)\n",
-	       ii,rval, sdata[ii],ii,4,5,6);
+      rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform)&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK;
+      if( (rval) != sdata[ii])
+	logMsg("faSetPPG(%d): ERROR: Write error (%d) %x != %x (ii=%d)\n",
+	       fe_chip,ii,rval, sdata[ii],ii,4,5,6);
 
     }
 
   /* Write the last two samples without the write flag */
   vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 	     (sdata[(nsamples-2)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
-  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
+  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform)&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK;
   if(rval != sdata[(nsamples-2)])
-    logMsg("faSetPPG: ERROR: Write error (%d) %x != %x\n",nsamples-2,
-	       rval, sdata[nsamples-2],3,4,5,6);
-
+    logMsg("faSetPPG(%d): ERROR: Write error (%d) %x != %x\n",fe_chip,nsamples-2,
+	   rval, sdata[nsamples-2],3,4,5,6);
+  
   vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 	     (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
-  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform);
+  rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform)&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK;
   if(rval != sdata[(nsamples-1)])
-    logMsg("faSetPPG: ERROR: Write error (%d) %x != %x\n",nsamples-1,
-	       rval, sdata[nsamples-1],3,4,5,6);
+    logMsg("faSetPPG(%d): ERROR: Write error (%d) %x != %x\n",fe_chip,nsamples-1,
+	   rval, sdata[nsamples-1],3,4,5,6);
     
   FA125UNLOCK;
   
@@ -3288,8 +3291,10 @@ fa125DecodeData(unsigned int data)
 	case 6:/* PULSE RAW DATA */
 	  if( fadc_data.new_type )
 	    {
-	      fadc_data.chan = (data & 0x7800000) >> 23;
-	      fadc_data.pulse_num = (data & 0x600000) >> 21;
+	      fadc_data.chan = (data & 0x07F00000) >> 20;
+	      fadc_data.pulse_num = 0;
+/* 	      fadc_data.chan = (data & 0x7800000) >> 23; */
+/* 	      fadc_data.pulse_num = (data & 0x600000) >> 21; */
 	      fadc_data.thres_bin = (data & 0x3FF);
 	      if( i_print ) 
 		printf("%8X - PULSE RAW DATA - chan = %d   pulse # = %d   threshold bin = %d\n", 
@@ -3313,8 +3318,8 @@ fa125DecodeData(unsigned int data)
 	  break;
 
 	case 7:/* PULSE INTEGRAL */
-	  fadc_data.chan = (data & 0x7800000) >> 23;
-	  fadc_data.pulse_num = (data & 0x600000) >> 21;
+	  fadc_data.chan = (data & 0x07F00000) >> 20;
+	  fadc_data.pulse_num = 0;
 	  fadc_data.quality = (data & 0x180000) >> 19;
 	  fadc_data.integral = (data & 0x7FFFF);
 	  if( i_print ) 
@@ -3323,18 +3328,20 @@ fa125DecodeData(unsigned int data)
 		   fadc_data.quality, fadc_data.integral);
 	  break;
 
-	  /* !!! */       case 8:/* PULSE TIME */
-			    fadc_data.chan = (data & 0x7800000) >> 23;
-			    fadc_data.pulse_num = (data & 0x600000) >> 21;
-			    fadc_data.quality = (data & 0x180000) >> 19;
-			    fadc_data.time = (data & 0xFFFF);
-			    fadc_data.time_coarse = (data & 0xFFC0) >> 6;
-			    fadc_data.time_fine = (data & 0x3F);
-			    if( i_print ) 
-			      printf("%8X - PULSE TIME - chan = %d  pulse # = %d  qual = %d  t = %d (c = %d  f = %d)\n", 
-				     data, fadc_data.chan, fadc_data.pulse_num, fadc_data.quality, 
-				     fadc_data.time, fadc_data.time_coarse, fadc_data.time_fine);
-			    break;
+	case 8:/* PULSE TIME */
+	  fadc_data.chan = (data & 0x07F00000) >> 20;
+	  fadc_data.pulse_num = 0;
+/* 	  fadc_data.chan = (data & 0x7800000) >> 23; */
+/* 	  fadc_data.pulse_num = (data & 0x600000) >> 21; */
+	  fadc_data.quality = (data & 0x180000) >> 19;
+	  fadc_data.time = (data & 0xFFFF);
+	  fadc_data.time_coarse = (data & 0xFFC0) >> 6;
+	  fadc_data.time_fine = (data & 0x3F);
+	  if( i_print ) 
+	    printf("%8X - PULSE TIME - chan = %d  pulse # = %d  qual = %d  t = %d (c = %d  f = %d)\n", 
+		   data, fadc_data.chan, fadc_data.pulse_num, fadc_data.quality, 
+		   fadc_data.time, fadc_data.time_coarse, fadc_data.time_fine);
+	  break;
 
 	case 9:/* STREAMING RAW DATA */
 	  if( fadc_data.new_type )
@@ -3374,16 +3381,18 @@ fa125DecodeData(unsigned int data)
 	    }    
 	  break;
 
-	  /* !!! */       case 10:/* PULSE PARAMETERS */
-			    fadc_data.chan = (data & 0x7800000) >> 23;
-			    fadc_data.pulse_num = (data & 0x600000) >> 21;
-			    fadc_data.vmin = (data & 0x1FF000) >> 12;
-			    fadc_data.vpeak = (data & 0xFFF);
-			    if( i_print ) 
-			      printf("%8X - PULSE V - chan = %d   pulse # = %d   vmin = %d   vpeak = %d\n", 
-				     data, fadc_data.chan, fadc_data.pulse_num, 
-				     fadc_data.vmin, fadc_data.vpeak);
-			    break;
+	case 10:/* PULSE PARAMETERS */
+/* 	  fadc_data.chan = (data & 0x7800000) >> 23; */
+	  /* 			    fadc_data.pulse_num = (data & 0x600000) >> 21; */
+	  fadc_data.chan = (data & 0x07F00000) >> 20;
+	  fadc_data.pulse_num = 0;
+	  fadc_data.vmin = (data & 0x1FF000) >> 12;
+	  fadc_data.vpeak = (data & 0xFFF);
+	  if( i_print ) 
+	    printf("%8X - PULSE V - chan = %d   pulse # = %d   vmin = %d   vpeak = %d\n", 
+		   data, fadc_data.chan, fadc_data.pulse_num, 
+		   fadc_data.vmin, fadc_data.vpeak);
+	  break;
 
 	case 11:/* UNDEFINED TYPE */
 	  if( i_print ) 
@@ -5026,4 +5035,7 @@ fa125FirmwareGCheckErrors()
 const char *fa125_mode_names[FA125_SUPPORTED_NMODES] = 
   {
     "Raw Window Mode"
+    "Raw Pulse Mode",
+    "Pulse Integral Mode",
+    "Pulse Time Mode"
   };

@@ -110,9 +110,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010201
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010201
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00010201
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010202
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010202
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00010202
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -249,23 +249,23 @@ struct fa125_a32
 #define FA125_PROC_BLOCKLEVEL_MASK    0x0000FFFF
 
 /* 0xD018 proc trig_count register definitions */
-#define FA125_PROC_TRIGCOUNT_MASK  0x7FFFFFFF
-#define FA125_PROC_TRIGCOUNT_RESET (1<<31)
+#define FA125_PROC_TRIGCOUNT_MASK  0xFFFFFFFF
+#define FA125_PROC_TRIGCOUNT_RESET 1
 
 /* 0xD01C proc ev_count register definitions */
 #define FA125_PROC_EVCOUNT_MASK  0x00FFFFFF
 
 /* 0xD020 proc clock125_count register definitions */
 #define FA125_PROC_CLOCK125COUNT_MASK  0xFFFFFFFF
-#define FA125_PROC_CLOCK125COUNT_RESET 0
+#define FA125_PROC_CLOCK125COUNT_RESET 1
 
 /* 0xD024 proc sync_count register definitions */
 #define FA125_PROC_SYNCCOUNT_MASK  0xFFFFFFFF
-#define FA125_PROC_SYNCCOUNT_RESET 0
+#define FA125_PROC_SYNCCOUNT_RESET 1
 
 /* 0xD028 proc trig2_count register definitions */
 #define FA125_PROC_TRIG2COUNT_MASK  0xFFFFFFFF
-#define FA125_PROC_TRIG2COUNT_RESET 0
+#define FA125_PROC_TRIG2COUNT_RESET 1
 
 /* 0xD02C pulser_control register definitions */
 #define FA125_PROC_PULSER_CONTROL_PULSE            (1<<0)
@@ -361,8 +361,11 @@ typedef enum
 
 /* Processing Modes */
 #define FA125_PROC_MODE_RAWWINDOW          1
-#define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW
-#define FA125_SUPPORTED_NMODES 1
+#define FA125_PROC_MODE_PULSERAW           2
+#define FA125_PROC_MODE_INTEGRAL           3
+#define FA125_PROC_MODE_TIME               4
+#define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW,FA125_PROC_MODE_PULSERAW,FA125_PROC_MODE_INTEGRAL
+#define FA125_SUPPORTED_NMODES 3
 
 extern const char *fa125_mode_names[FA125_SUPPORTED_NMODES];
 

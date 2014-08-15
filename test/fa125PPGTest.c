@@ -202,14 +202,15 @@ main(int argc, char *argv[])
       
       fa125PrintTemps(faslot);
 /*       fa125Clear(faslot); */
-
+      fa125SetCommonThreshold(faslot, 1);
       fa125SetBlocklevel(faslot, 1);
 
       fa125Reset(faslot, 0);
 
-      fa125SetChannelEnableMask(faslot, 0x3f, 0,0);
+      fa125SetChannelEnableMask(faslot, 0, 0,0xfc003f);
       fa125Reset(faslot, 0);
-      fa125SetPPG(faslot,adc_playback,32*6);
+      for(i = 0; i<12; i++)
+	fa125SetPPG(faslot,i,adc_playback,32*6);
       fa125SetProcMode(faslot, 3, 620, 70, 
 		       0,0,1);
       fa125PPGEnable(faslot);
@@ -247,6 +248,9 @@ main(int argc, char *argv[])
       fa125PrintTemps(faslot);
       fa125PowerOff(faslot);
     }
+  fa125GStatus(0);
+/*   fa125Reset(faslot, 0); */
+  fa125ResetCounters(0);
   fa125GStatus(0);
   printf("berr_count = %d\n",fa125GetBerrCount());
 
@@ -434,6 +438,8 @@ myISR(int arg)
 /*   getchar(); */
 #endif
   dmaPFreeItem(outEvent);
+
+  fa125GStatus(0);
 
   if(tiIntCount%1000==0)
     printf("intCount = %d\n",tiIntCount );
