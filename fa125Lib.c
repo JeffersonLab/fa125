@@ -5036,6 +5036,5 @@ const char *fa125_mode_names[FA125_SUPPORTED_NMODES] =
   {
     "Raw Window Mode"
     "Raw Pulse Mode",
-    "Pulse Integral Mode",
-    "Pulse Time Mode"
+    "Pulse Integral Mode"
   };
