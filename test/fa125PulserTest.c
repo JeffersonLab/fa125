@@ -95,7 +95,8 @@ main(int argc, char *argv[])
     (2) 1 0  Internal 125MHz Clock
   */
   iFlag |= (1<<1);  /* Trigger Source */
-  iFlag |= (2<<4);  /* Clock Source */
+  iFlag |= (1<<4);  /* Clock Source */
+  iFlag |= FA125_INIT_SKIP_FIRMWARE_CHECK;
 
   stat = fa125Init(7<<19,1<<19,2,iFlag);
   if (stat != OK) 
@@ -109,8 +110,8 @@ main(int argc, char *argv[])
   fa125ResetToken(0);
   for(iadc=0; iadc<nfa125; iadc++)
     {
-      fa125Reset(fa125Slot(iadc), 0);
       fa125PowerOn(fa125Slot(iadc));
+      fa125Reset(fa125Slot(iadc), 0);
 
       fa125SetCommonThreshold(fa125Slot(iadc), 0);
       fa125PrintThreshold(fa125Slot(iadc));
@@ -125,7 +126,7 @@ main(int argc, char *argv[])
 	{
 	  fa125SetPulserAmplitude(0,i,0xFFF0);
 	}
-      fa125SetProcMode(fa125Slot(iadc),1,50,50,0,0,0);
+      fa125SetProcMode(fa125Slot(iadc),8,50,50,0,0,0);
       
       fa125SetChannelEnableMask(fa125Slot(iadc),0,0xFFFFFF,0);
       fa125PrintTemps(fa125Slot(iadc));

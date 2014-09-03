@@ -150,6 +150,7 @@ main(int argc, char *argv[])
   */
   iFlag |= (0<<1);  /* Trigger Source */
   iFlag |= (1<<4);  /* Clock Source */
+  iFlag |= FA125_INIT_SKIP_FIRMWARE_CHECK;
 
   stat = fa125Init(3<<19,1<<19,nmods,iFlag);
   if (stat != OK) 
@@ -187,6 +188,7 @@ main(int argc, char *argv[])
     {
       faslot = fa125Slot(iadc);
       fa125PowerOn(faslot);
+      fa125Reset(faslot, 0);
 
       int ichan=0;
       for(ichan=0; ichan<72; ichan++)
@@ -205,10 +207,10 @@ main(int argc, char *argv[])
       fa125SetCommonThreshold(faslot, 1);
       fa125SetBlocklevel(faslot, 1);
 
-      fa125Reset(faslot, 0);
+/*       fa125Reset(faslot, 0); */
 
       fa125SetChannelEnableMask(faslot, 0, 0,0xfc003f);
-      fa125Reset(faslot, 0);
+/*       fa125Reset(faslot, 0); */
       for(i = 0; i<12; i++)
 	fa125SetPPG(faslot,i,adc_playback,32*6);
       fa125SetProcMode(faslot, 3, 620, 70, 
