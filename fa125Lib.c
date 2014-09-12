@@ -661,6 +661,9 @@ fa125Status(int id, int pflag)
       printf("  clock          (0x%04x) = 0x%08x\n", 
 	     (unsigned int)(&fa125p[id]->main.clock) - faBase, m.clock);
 
+      printf("  config1        (0x%04x) = 0x%08x\n", 
+	     (unsigned int)(&fa125p[id]->fe[0].config1) - faBase, f[0].config1);
+
       printf("\n");
 
       for(i=0; i<12; i=i+2)

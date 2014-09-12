@@ -110,9 +110,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010202
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010202
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00010202
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010204
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010204
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00010204
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -351,13 +351,13 @@ typedef enum
 #define FA125_DEFAULT_PTW    50
 #define FA125_DEFAULT_NSB     5
 #define FA125_DEFAULT_NSA    10
-#define FA125_DEFAULT_NP      3
+#define FA125_DEFAULT_NP      1
 
 #define FA125_MAX_PL       1000
 #define FA125_MAX_PTW       512
 #define FA125_MAX_NSB       500
 #define FA125_MAX_NSA       500
-#define FA125_MAX_NP          3
+#define FA125_MAX_NP          1
 
 /* Processing Modes */
 #define FA125_PROC_MODE_RAWWINDOW          1
