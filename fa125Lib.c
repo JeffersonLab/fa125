@@ -2536,7 +2536,7 @@ fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples)
   if((nsamples <= 0)||(nsamples>FA125_PPG_MAX_SAMPLES)) 
     {
       logMsg("fa125SetPPG: WARN: Invalid nsamples (%d).  Setting to %d\n",
-	     nsamples, FA125_PPG_MAX_SAMPLES);
+	     nsamples, FA125_PPG_MAX_SAMPLES,3,4,5,6);
       nsamples = FA125_PPG_MAX_SAMPLES;
     }
 
@@ -2548,7 +2548,7 @@ fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples)
       rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform)&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK;
       if( (rval) != sdata[ii])
 	logMsg("faSetPPG(%d): ERROR: Write error (%d) %x != %x (ii=%d)\n",
-	       fe_chip,ii,rval, sdata[ii],ii,4,5,6);
+	       fe_chip,ii,rval, sdata[ii],ii,6);
 
     }
 
@@ -2558,14 +2558,14 @@ fa125SetPPG(int id, int fe_chip, unsigned short *sdata, int nsamples)
   rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform)&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK;
   if(rval != sdata[(nsamples-2)])
     logMsg("faSetPPG(%d): ERROR: Write error (%d) %x != %x\n",fe_chip,nsamples-2,
-	   rval, sdata[nsamples-2],3,4,5,6);
+	   rval, sdata[nsamples-2],5,6);
   
   vmeWrite32(&fa125p[id]->fe[fe_chip].test_waveform, 
 	     (sdata[(nsamples-1)]&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK));
   rval = vmeRead32(&fa125p[id]->fe[fe_chip].test_waveform)&FA125_FE_TEST_WAVEFORM_PPG_DATA_MASK;
   if(rval != sdata[(nsamples-1)])
     logMsg("faSetPPG(%d): ERROR: Write error (%d) %x != %x\n",fe_chip,nsamples-1,
-	   rval, sdata[nsamples-1],3,4,5,6);
+	   rval, sdata[nsamples-1],5,6);
     
   FA125UNLOCK;
   
