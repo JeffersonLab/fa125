@@ -926,7 +926,7 @@ fa125GStatus(int pflag)
 
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
-  printf("      Block                                             \n");
+  printf("      Block          ...[nanoseconds]...\n");
   printf("Slot  Level  Mode    PL   PTW   NSB  NSA  NP   Playback \n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
