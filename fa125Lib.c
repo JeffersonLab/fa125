@@ -5035,9 +5035,16 @@ fa125FirmwareGCheckErrors()
   return rval;
 }
 
-const char *fa125_mode_names[FA125_SUPPORTED_NMODES] = 
+const char *fa125_mode_names[FA125_MAXIMUM_NMODES] = 
   {
-    "Raw Window Mode"
-    "Raw Pulse Mode",
-    "Pulse Integral Mode"
+    "Raw Window Mode",     // 0 
+    "Raw Pulse Mode",      // 1
+    "Pulse Integral Mode", // 2
+    "High Rez TDC",        // 3
+    "", // 4
+    "", // 5
+    "Integral TDC",        // 6
+    "Raw Data TDC",        // 7
+    "", // 8
+    ""  // 9
   };
