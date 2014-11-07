@@ -33,6 +33,9 @@ ifeq ($(ARCH),VXWORKSPPC)
 VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
 
 DEFS   = -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall -fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
+ifdef DEBUG
+DEFS  += -Wall -g
+endif
 INCS   = -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
 CC     = ccppc $(INCS) $(DEFS)
 LD     = ldppc

@@ -101,7 +101,7 @@ main(int argc, char *argv[])
 
   tiSetPrescale(0);
   tiSetBlockLevel(1);
-  tiSetBlockLimit(3);
+/*   tiSetBlockLimit(3); */
 
 
   stat = tiIntConnect(TI_INT_VEC, myISR, 0);
@@ -165,6 +165,7 @@ main(int argc, char *argv[])
   */
   iFlag |= (0<<1);  /* Trigger Source */
   iFlag |= (1<<4);  /* Clock Source */
+  iFlag |= (1<<18); /*skip fw check?*/
 
   stat = fa125Init(3<<19,1<<19,nmods,iFlag);
   fa125CheckAddresses(fa125Slot(0));
@@ -208,7 +209,7 @@ main(int argc, char *argv[])
       fa125SetBlocklevel(faslot, 1);
 
       fa125Reset(faslot, 0);
-      rval = fa125SetProcMode(faslot,1,100,26,0,0,0);
+      rval = fa125SetProcMode(faslot,8,100,26,0,0,0);
       if(rval==ERROR)
 	{
 	  printf("ERROR!\n");

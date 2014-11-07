@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "jvme.h"
+#include "tiLib.h"
+#include "sdLib.h"
 #include "fa125Lib.h"
 
 void myISR(int arg);
@@ -22,6 +24,12 @@ DMA_MEM_ID vmeIN,vmeOUT;
 extern DMANODE *the_event;
 extern unsigned int *dma_dabufp;
 
+#define BLOCKLEVEL 1
+#define PROCMODE   8
+#define NSA        0
+#define NSB        0
+#define PL      0x50
+#define PTW     0x28
 
 extern int nfa125;
 
@@ -81,6 +89,25 @@ main(int argc, char *argv[])
 
   dmaPReInitAll();
 
+  tiInit(0,TI_READOUT_EXT_POLL,0);
+  tiLoadTriggerTable(0);
+    
+  tiSetTriggerHoldoff(1,4,0);
+  tiSetTriggerHoldoff(2,4,0);
+
+  tiSetBlockLimit(0);
+  tiDisableDataReadout();
+  tiDisableA32();
+  tiSetTriggerSource(TI_TRIGGER_PULSER);
+  tiClockReset();
+  taskDelay(1);
+  tiTrigLinkReset();
+  taskDelay(1);
+  tiEnableVXSSignals();
+  tiSetBlockLevel(BLOCKLEVEL);
+
+  tiStatus(1);
+
   int iFlag=0;
   /*
     bits 2-1:  defines Trigger source
@@ -94,7 +121,7 @@ main(int argc, char *argv[])
     (1) 0 1  VXS (P0)
     (2) 1 0  Internal 125MHz Clock
   */
-  iFlag |= (1<<1);  /* Trigger Source */
+  iFlag |= (0<<1);  /* Trigger Source */
   iFlag |= (1<<4);  /* Clock Source */
   iFlag |= FA125_INIT_SKIP_FIRMWARE_CHECK;
 
@@ -104,6 +131,9 @@ main(int argc, char *argv[])
       printf("ERROR: fa125Init failed \n");
       goto CLOSE;
     } 
+
+  sdInit(0);
+  sdSetActiveVmeSlots(fa125ScanMask());
 
 
   int iadc=0;
@@ -119,30 +149,49 @@ main(int argc, char *argv[])
       int ichan=0;
       for(ichan=0; ichan<72; ichan++)
 	{
-	  fa125SetOffset(fa125Slot(iadc),ichan,0x8000);
+	  fa125SetOffset(fa125Slot(iadc),ichan,0x4000);
 	}
       int i=0;
       for(i=0; i<3 ; i++)
 	{
-	  fa125SetPulserAmplitude(0,i,0xFFF0);
+	  fa125SetPulserAmplitude(0,i,0x8FFF);
 	}
-      fa125SetProcMode(fa125Slot(iadc),8,50,50,0,0,0);
+      fa125SetProcMode(fa125Slot(iadc),PROCMODE,PL,PTW,NSB,NSA,0);
       
-      fa125SetChannelEnableMask(fa125Slot(iadc),0,0xFFFFFF,0);
+      fa125SetChannelEnableMask(fa125Slot(iadc),0xFFFFFF,0xFFFFFF,0xFFFFFF);
       fa125PrintTemps(fa125Slot(iadc));
 
-      fa125SetBlocklevel(fa125Slot(iadc), 1);
+      fa125SetBlocklevel(fa125Slot(iadc), BLOCKLEVEL);
 
       fa125Enable(fa125Slot(iadc));
     }
-  fa125GStatus(0);
+  fa125Status(0,1);
 
   fa125ResetToken(0);
+/*   tiSetBlockLimit(nPulses); */
 
+  tiStatus(1);
+  stat = tiIntConnect(TI_INT_VEC, myISR, 0);
+  if (stat != OK) 
+    {
+      printf("ERROR: tiIntConnect failed \n");
+      goto CLOSE;
+    } 
+  else 
+    {
+      printf("INFO: Attached TI Interrupt\n");
+    }
+
+
+  taskDelay(1);
+  tiSyncReset(1);
   printf("Hit any key to enable Triggers...\n");
   getchar();
+  tiIntEnable(1);
+  tiSetRandomTrigger(1,0x7);
 
   int itrig=0, output=0;
+#ifdef PULSERSTUFF
   
   if(doTrig)
     {
@@ -152,12 +201,22 @@ main(int argc, char *argv[])
     }
   for(itrig=0; itrig<nPulses; itrig++)
     {
-      fa125SoftPulser(0, output);
+      tiSoftTrig(1,0x1,0x700,1);
+/*       fa125SoftPulser(0, output); */
       myISR(0);
+      if((itrig+1)!=nPulses)
+	{
+	  printf("<Enter> for next trigger\n");
+	  getchar();
+	}
     }
+#endif
 
   printf("Hit any key to Disable TIR and exit.\n");
   getchar();
+  tiIntDisable();
+
+  tiIntDisconnect();
 
   for(iadc=0; iadc<nfa125; iadc++)
     {
@@ -166,6 +225,7 @@ main(int argc, char *argv[])
     }
   fa125GStatus(0);
   printf("berr_count = %d\n",fa125GetBerrCount());
+  tiStatus(0);
 
  CLOSE:
 
@@ -182,6 +242,20 @@ myISR(int arg)
   DMANODE *outEvent;
   int timeout=0;
   static int intCount=0;
+  int tibready=0;
+
+/*   if((tibready==0) && (timeout<100)) */
+/*     { */
+/*       printf("NOT READY!\n"); */
+/*       tibready=tiBReady(); */
+/*       timeout++; */
+/*     } */
+
+/*   if(tibready==0) */
+/*     { */
+/*       printf("TIMEOUT!\n"); */
+/*       return; */
+/*     } */
 
   GETEVENT(vmeIN,intCount);
 
@@ -247,5 +321,7 @@ myISR(int arg)
       printf(" event length = %d\n",len);
     }
   dmaPFreeItem(outEvent);
+
+/*   tiIntAck(); */
 
 }
