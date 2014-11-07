@@ -86,15 +86,23 @@ main(int argc, char *argv[]) {
 	goto CLOSE;
       }
 
+    vmeBusLock();
     fa125FirmwareSetDebug(FA125_FIRMWARE_DEBUG_MEASURE_TIMES |
 			  FA125_FIRMWARE_DEBUG_VERIFY_ERASE);
 
     if(fa125FirmwareEraseFull(0)!=OK)
-      goto CLOSE;
+      {
+	vmeBusUnlock();
+	goto CLOSE;
+      }
 
     if(fa125FirmwareWriteFull(0)!=OK)
-      goto CLOSE;
+      {
+	vmeBusUnlock();
+	goto CLOSE;
+      }
 
+    vmeBusUnlock();
 
  CLOSE:
 
