@@ -212,7 +212,7 @@ struct fa125_a32
 #define FA125_FE_CONFIG1_MASK            0x000000FF
 #define FA125_FE_CONFIG1_MODE_MASK       0x00000007
 #define FA125_FE_CONFIG1_ENABLE          (1<<3)
-#define FA125_FE_CONFIG1_NPULSES_MASK    0x00000060
+#define FA125_FE_CONFIG1_NPULSES_MASK    0x00000070
 #define FA125_FE_CONFIG1_PLAYBACK_ENABLE (1<<7)
 
 /* 0xN08C FE trig_count definitions */
@@ -357,7 +357,7 @@ typedef enum
 #define FA125_MAX_PTW       512
 #define FA125_MAX_NSB       500
 #define FA125_MAX_NSA       500
-#define FA125_MAX_NP          1
+#define FA125_MAX_NP          3
 
 /* Processing Modes */
 #define FA125_PROC_MODE_RAWWINDOW          1

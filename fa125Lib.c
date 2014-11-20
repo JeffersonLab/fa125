@@ -765,7 +765,7 @@ fa125Status(int id, int pflag)
 	 8*f[0].pl, 8*f[0].ptw);
   printf("   Time Before Peak = %d ns   Time After Peak   = %d ns\n",
 	 8*f[0].nsb,8*f[0].nsa);
-  printf("   Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>5);
+  printf("   Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
   printf("   Playback Mode    = %s \n",
 	 (f[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE)?"ENABLED":"DISABLED");
 
@@ -946,7 +946,7 @@ fa125GStatus(int pflag)
 
       printf("%3d  ", 8*st[id].fe[0].nsa);
 
-      printf("%1d    ", (st[id].fe[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>5);
+      printf("%1d    ", (st[id].fe[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
 
       printf("%s   ",
 	     (st[id].fe[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE) ?" Enabled":"Disabled");
@@ -1055,10 +1055,10 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
       return ERROR;
     }
 
-  if(NP>3) 
+  if( (NP==0) || (NP>FA125_MAX_NP)) 
     {
-      printf("%s: ERROR: Invalid Peak count %d (must be 0-3)\n",
-	     __FUNCTION__,NP);
+      printf("%s: ERROR: Invalid Peak count %d (must be 1-%d)\n",
+	     __FUNCTION__,NP,FA125_MAX_NP);
       return ERROR;
     }
 
@@ -1087,7 +1087,7 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
 
   FA125LOCK;
   /* Disable ADC processing while writing window info */
-  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<5)));
+  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<4)));
   vmeWrite32(&fa125p[id]->fe[0].pl, PL);
   vmeWrite32(&fa125p[id]->fe[0].ptw, PTW);
   vmeWrite32(&fa125p[id]->fe[0].ptw_max_buf, ptw_max_buf);
@@ -1096,7 +1096,7 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
   vmeWrite32(&fa125p[id]->fe[0].nsa, NSA);
 
   /* Enable ADC processing */
-  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<5) | FA125_FE_CONFIG1_ENABLE) );
+  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<4) | FA125_FE_CONFIG1_ENABLE) );
 
   FA125UNLOCK;
 
