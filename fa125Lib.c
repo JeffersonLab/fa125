@@ -1737,7 +1737,7 @@ fa125PrintThreshold(int id)
 
   if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
     {
-      logMsg("fa215PrintThreshold: ERROR : FA125 in slot %d is not initialized \n",id,0,0,0,0,0);
+      logMsg("fa125PrintThreshold: ERROR : FA125 in slot %d is not initialized \n",id,0,0,0,0,0);
       return(ERROR);
     }
 
@@ -3033,25 +3033,26 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 #ifndef VXWORKS
       bhead = LSWAP(bhead);
 #endif
-      if((bhead&FA125_DATA_TYPE_DEFINE)&&((bhead&FA125_DATA_TYPE_MASK) == FA125_DATA_BLOCK_HEADER)) {
-	blknum = bhead&FA125_DATA_BLKNUM_MASK;
-	ehead = fa125pd[id]->data;
+      if((bhead&FA125_DATA_TYPE_DEFINE)&&((bhead&FA125_DATA_TYPE_MASK) == FA125_DATA_BLOCK_HEADER)) 
+	{
+	  blknum = bhead&FA125_DATA_BLKNUM_MASK;
+	  ehead = fa125pd[id]->data;
 #ifndef VXWORKS
-	ehead = LSWAP(ehead);
+	  ehead = LSWAP(ehead);
 #endif
 #ifdef VXWORKS
-	data[dCnt] = bhead;
+	  data[dCnt] = bhead;
 #else
-	data[dCnt] = LSWAP(bhead); /* Swap back to little-endian */
+	  data[dCnt] = LSWAP(bhead); /* Swap back to little-endian */
 #endif
-	dCnt++;
+	  dCnt++;
 #ifdef VXWORKS
-	data[dCnt] = ehead;
+	  data[dCnt] = ehead;
 #else
-	data[dCnt] = LSWAP(ehead); /* Swap back to little-endian */
+	  data[dCnt] = LSWAP(ehead); /* Swap back to little-endian */
 #endif
-	dCnt++;
-      }
+	  dCnt++;
+	}
       else
 	{
 	  /* We got bad data - Check if there is any data at all */
