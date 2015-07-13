@@ -60,22 +60,21 @@ struct fa125_a24_fe
 {
   /* 0xN000 */ volatile UINT32 version;
   /* 0xN004 */ volatile UINT32 test;
-  /* 0xN008 */          UINT32 blank0[(0x20-0x08)/4];
-  /* 0xN020 */ volatile UINT32 adc_async[6];
-  /* 0xN038 */          UINT32 blank1[(0x40-0x38)/4];
-  /* 0xN040 */ volatile UINT32 acqfifo[6];
+  /* 0xN008 */          UINT32 blank0[(0x58-0x08)/4];
   /* 0xN058 */ volatile UINT32 ptw;
   /* 0xN05C */ volatile UINT32 pl;
-  /* 0xN060 */ volatile UINT32 ptw_last_adr;
-  /* 0xN064 */ volatile UINT32 ptw_max_buf;
-  /* 0xN068 */ volatile UINT32 nsb;
-  /* 0xN06C */ volatile UINT32 nsa;
+  /* 0xN060 */          UINT32 blank1[(0x70-0x60)/4];
   /* 0xN070 */ volatile UINT32 threshold[6];
   /* 0xN088 */ volatile UINT32 config1;
   /* 0xN08C */ volatile UINT32 trig_count;
   /* 0xN090 */ volatile UINT32 config2;
   /* 0xN094 */ volatile UINT32 test_waveform;
-  /* 0xN098 */          UINT32 blank2[(0x1000-0x98)/4];
+  /* 0xN098 */          UINT32 blank2;
+  /* 0xN09C */ volatile UINT32 ppg_trig_delay;
+  /* 0xN0A0 */ volatile UINT32 ped_sf;
+  /* 0xN0A4 */ volatile UINT32 timing_thres[3];
+  /* 0xN0B0 */ volatile UINT32 integration_end;
+  /* 0xN0B4 */          UINT32 blank3[(0x1000-0xB4)/4];
 };
 
 struct fa125_a24_proc 
@@ -110,9 +109,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00010208
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00010208
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00010208
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020001
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020001
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00020001
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -188,22 +187,10 @@ struct fa125_a32
 #define FA125_FE_TEST_SYNCRESET_ENABLE (1<<2)
 
 /* 0x1058 FE ptw register defintions */
-#define FA125_FE_PTW_MASK          0x000000FF
+#define FA125_FE_PTW_MASK          0x000003FF
 
 /* 0x105C FE pl register defintions */
 #define FA125_FE_PL_MASK           0x0000FFFF
-
-/* 0x1060 FE ptw_last_adr register defintions */
-#define FA125_FE_PTW_LAST_ADR_MASK 0x00000FFF
-
-/* 0x1064 FE ptw_max_buf register defintions */
-#define FA125_FE_PTW_MAX_BUF_MASK  0x000000FF
-
-/* 0x1068 FE NSB register defintions */
-#define FA125_FE_NSB_MASK          0x00001FFF
-
-/* 0x106C FE NSA register defintions */
-#define FA125_FE_NSA_MASK          0x00003FFF
 
 /* 0xN070 - 0xN084 threshold register defintions */
 #define FA125_FE_THRESHOLD_MASK          0x00000FFF
@@ -226,6 +213,23 @@ struct fa125_a32
 #define FA125_FE_TEST_WAVEFORM_OVERFLOW       (1<<12)
 #define FA125_FE_TEST_WAVEFORM_WRITE_PPG_DATA (1<<15)
 #define FA125_PPG_MAX_SAMPLES                 32*6
+
+/* 0xN09C FE PPG_trig_delay definitions */
+#define FA125_FE_PPG_TRIG_DELAY_MASK  0x00000FFF
+
+/* 0xN0A0 FE ped_sf definitions */
+#define FA125_FE_PED_SF_NP_MASK       0x000000FF
+#define FA125_FE_PED_SF_NP2_MASK      0x0000FF00
+#define FA125_FE_PED_SF_IBIT_MASK     0x00070000
+#define FA125_FE_PED_SF_ABIT_MASK     0x00380000
+#define FA125_FE_PED_SF_PBIT_MASK     0x01C00000
+
+/* 0xN0A4 FE timing_thres definitions */
+#define FA125_FE_TIMING_THRES_HI_MASK(x) (0xFF<<((x%2)*16))
+#define FA125_FE_TIMING_THRES_LO_MASK(x) (0xFF<<(8+((x%2)*16)))
+
+/* 0xN0B0 FE integration_end definitions */
+#define FA125_FE_INTEGRATION_END_MASK  0x00000FFF
 
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
