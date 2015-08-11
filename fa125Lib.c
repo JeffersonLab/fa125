@@ -1139,6 +1139,221 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
 
 /**
  *  @ingroup Config
+ *  @brief Set the Integration, Amplitude, and Pedestal scale factors for the selected module
+ *  @param id   Slot number
+ *  @param IBIT Integration Scale Factor
+ *  @param ABIT Amplitude Scale Factor
+ *  @param PBIT Pedestal Scale Factor
+ *  @return OK if successful, otherwise ERROR.
+ */
+
+int
+fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int PBIT)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+  
+  if((IBIT>7) || (ABIT>7) || (PBIT>7))
+    {
+      printf("%s: ERROR: Invalid scale factor(s). All must be <= 7\n",
+	     __FUNCTION__);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->fe[0].ped_sf,
+	     (vmeRead32(&fa125p[id]->fe[0].ped_sf) & 
+	      (FA125_FE_PED_SF_NP_MASK | FA125_FE_PED_SF_NP2_MASK)) |
+	     (IBIT<<16) | (ABIT<<19) || (PBIT<<22));
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Return the value stored for the Integration Scale Factor
+ *  @param id Slot number
+ *  @return Integration Scale Factor if successful, otherwise ERROR.
+ */
+int
+fa125GetIntegrationScaleFactor(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = (vmeRead32(&fa125p[id]->fe[0].ped_sf) & FA125_FE_PED_SF_IBIT_MASK)>>16;
+  FA125UNLOCK;
+
+  return rval;
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Return the value stored for the Amplitude Scale Factor
+ *  @param id Slot number
+ *  @return Amplitude Scale Factor if successful, otherwise ERROR.
+ */
+int
+fa125GetAmplitudeScaleFactor(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = (vmeRead32(&fa125p[id]->fe[0].ped_sf) & FA125_FE_PED_SF_ABIT_MASK)>>19;
+  FA125UNLOCK;
+
+  return rval;
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Return the value stored for the Pedestal Scale Factor
+ *  @param id Slot number
+ *  @return Pedestal Scale Factor if successful, otherwise ERROR.
+ */
+int
+fa125GetPedestalScaleFactor(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = (vmeRead32(&fa125p[id]->fe[0].ped_sf) & FA125_FE_PED_SF_PBIT_MASK)>>22;
+  FA125UNLOCK;
+
+  return rval;
+}
+
+
+/**
+ *  @ingroup Config
+ *  @brief Set the Low and High timing threshold for the selected channel in the selected module.
+ *  @param id Slot number
+ *  @param chan Channel Number
+ *  @param lo Low timing threshold
+ *  @param hi High timing threshold
+ *  @return Pedestal Scale Factor if successful, otherwise ERROR.
+ */
+int
+fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int hi)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if(chan>=FA125_MAX_ADC_CHANNELS)
+  {
+      printf("%s: ERROR: Invalid channel (%d). Must be 0-%d\n",
+	     __FUNCTION__,chan,FA125_MAX_ADC_CHANNELS);
+      return ERROR;
+    }
+
+  if(lo>0xff)
+    {
+      printf("%s: ERROR: Invalid value for Low Threshold (%d)\n",
+	     __FUNCTION__,lo);
+      return ERROR;
+    }
+
+  if(hi>0xff)
+    {
+      printf("%s: ERROR: Invalid value for High Threshold (%d)\n",
+	     __FUNCTION__,hi);
+      return ERROR;
+    }
+  
+  FA125LOCK;
+  if(chan%2==0)
+    {
+      vmeWrite32(&fa125p[id]->fe[chan/6].threshold[chan%6],
+		 (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF0000) |
+		 (hi | (lo<<8)));
+    }
+  else
+    {
+      vmeWrite32(&fa125p[id]->fe[chan/6].threshold[chan%6],
+		 (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF) |
+		 ((hi<<16) | (lo<<24)));
+    }
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Get the timing threshold values for the selected channel on the selected module.
+ *  @param id Slot number
+ *  @param chan Channel Number
+ *  @return ((High Timing Threshold) | (Low timing threshold<<8)) if successful, otherwise ERROR.
+ */
+int
+fa125GetTimingThreshold(int id, unsigned int chan)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if(chan>=FA125_MAX_ADC_CHANNELS)
+  {
+      printf("%s: ERROR: Invalid channel (%d). Must be 0-%d\n",
+	     __FUNCTION__,chan,FA125_MAX_ADC_CHANNELS);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  if(chan%2==0)
+    {
+      rval = (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF);
+    }
+  else
+    {
+      rval = (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF0000)>>16;
+    }
+  FA125UNLOCK;
+
+  return rval;
+}
+
+
+
+/**
+ *  @ingroup Config
  *  @brief Power Off the fADC125
  *  @param id Slot number
  *  @return OK if successful, otherwise ERROR.
