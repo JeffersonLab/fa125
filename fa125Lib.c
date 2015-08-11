@@ -609,9 +609,10 @@ fa125Status(int id, int pflag)
   m.blockCSR     = vmeRead32(&fa125p[id]->main.blockCSR);
 
   f[0].config1   = vmeRead32(&fa125p[id]->fe[0].config1);
-  f[0].nw       = vmeRead32(&fa125p[id]->fe[0].nw);
+  f[0].nw        = vmeRead32(&fa125p[id]->fe[0].nw);
   f[0].pl        = vmeRead32(&fa125p[id]->fe[0].pl);
   f[0].ie        = vmeRead32(&fa125p[id]->fe[0].ie);
+  f[0].ped_sf    = vmeRead32(&fa125p[id]->fe[0].ped_sf);
 
   for(i=0; i<12; i++)
     {
@@ -756,16 +757,26 @@ fa125Status(int id, int pflag)
   printf("\n");
 
   printf(" Processing Configuration: \n");
-    printf("   Mode = %d  (%s)  - %s\n",
+    printf("   Mode = %d  (%s)  - %s\n\n",
 	   (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
 	   fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
 	   (f[0].config1 & FA125_FE_CONFIG1_ENABLE)?"ENABLED":"DISABLED");
-  printf("   Lookback (PL)    = %d ns   Time Window (NW) = %d ns\n",
+  printf("   Lookback               (PL) = %4d ns   Time Window           (NW) = %4d ns\n",
 	 8*f[0].pl, 8*f[0].nw);
-#ifdef NOTHERE
-  printf("   Time Before Peak = %d ns   Time After Peak   = %d ns\n",
-	 8*f[0].nsb,8*f[0].nsa);
-#endif
+  printf("   Integration End        (IE) = %4d ns   Pedestal Gap          (PG) = %4d ns\n",
+	 8*(f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK),
+	 8*((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
+  printf("   Initial Pedestal Width (NP) = %4d ns   Local Pedestal Width (NP2) = %4d ns\n",
+	 8*((f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	 8*((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8));
+  printf("\n");
+  printf("   Scale Factors:\n");
+  printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n\n",
+	 8*((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
+	 8*((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
+	 8*((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+	 
+
   printf("   Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
   printf("   Playback Mode    = %s \n",
 	 (f[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE)?"ENABLED":"DISABLED");
@@ -926,8 +937,9 @@ fa125GStatus(int pflag)
 
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
-  printf("      Block          ...[nanoseconds]...\n");
-  printf("Slot  Level  Mode    PL   NW   NSB  NSA  NP   Playback \n");
+  printf("                                                     Scale\n");
+  printf("      Block         ........[nanoseconds]........    Factor\n");
+  printf("Slot  Level  Mode    PL   NW    IE  PG    NP  NP2    I  A  P    NPK   Playback \n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
@@ -940,15 +952,25 @@ fa125GStatus(int pflag)
 
       printf("%4d ", 8*st[id].fe[0].pl);
 
-      printf("%4d   ", 8*st[id].fe[0].nw);
-#ifdef NOTHERE
-      printf("%3d  ", 8*st[id].fe[0].nsb);
+      printf("%4d  ", 8*st[id].fe[0].nw);
 
-      printf("%3d  ", 8*st[id].fe[0].nsa);
-#endif
-      printf("%1d    ", (st[id].fe[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
+      printf("%3d ", 8*(st[id].fe[0].ie & FA125_FE_IE_INTEGRATION_END_MASK));
 
-      printf("%s   ",
+      printf("%3d  ", 8*((st[id].fe[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
+
+      printf("%4d ", 1<<(st[id].fe[0].ped_sf & FA125_FE_PED_SF_NP_MASK) );
+
+      printf("%4d    ", 1<<((st[id].fe[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8) );
+
+      printf("%d  ", (st[id].fe[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16);
+
+      printf("%d  ", (st[id].fe[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19);
+
+      printf("%d    ", (st[id].fe[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22);
+
+      printf("%2d    ", (st[id].fe[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
+
+      printf("%s",
 	     (st[id].fe[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE) ?" Enabled":"Disabled");
 
       printf("\n");

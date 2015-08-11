@@ -194,8 +194,8 @@ struct fa125_a32
 #define FA125_FE_CONFIG1_MASK            0x000000FF
 #define FA125_FE_CONFIG1_MODE_MASK       0x00000007
 #define FA125_FE_CONFIG1_ENABLE          (1<<3)
-#define FA125_FE_CONFIG1_NPULSES_MASK    0x00000070
-#define FA125_FE_CONFIG1_PLAYBACK_ENABLE (1<<7)
+#define FA125_FE_CONFIG1_NPULSES_MASK    0x000003F0
+#define FA125_FE_CONFIG1_PLAYBACK_ENABLE (1<<10)
 
 /* 0xN08C FE trig_count definitions */
 #define FA125_FE_TRIG_COUNT_MASK  0x0000FFFF
@@ -224,7 +224,8 @@ struct fa125_a32
 #define FA125_FE_TIMING_THRES_LO_MASK(x) (0xFF<<(8+((x%2)*16)))
 
 /* 0xN0B0 FE integration_end definitions */
-#define FA125_FE_INTEGRATION_END_MASK  0x00000FFF
+#define FA125_FE_IE_INTEGRATION_END_MASK  0x00000FFF
+#define FA125_FE_IE_PEDESTAL_GAP_MASK     0x000FF000
 
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
@@ -401,6 +402,12 @@ void fa125GStatus(int pflag);
 int  fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW, 
 		      unsigned int IE, unsigned int PG, unsigned int NPK,
 		      unsigned int P1, unsigned int P2);
+int  fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int PBIT);
+int  fa125GetIntegrationScaleFactor(int id);
+int  fa125GetAmplitudeScaleFactor(int id);
+int  fa125GetPedestalScaleFactor(int id);
+int  fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int hi);
+int  fa125GetTimingThreshold(int id, unsigned int chan);
 int  fa125Slot(unsigned int i);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
