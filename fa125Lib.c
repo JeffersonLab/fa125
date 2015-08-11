@@ -609,12 +609,9 @@ fa125Status(int id, int pflag)
   m.blockCSR     = vmeRead32(&fa125p[id]->main.blockCSR);
 
   f[0].config1   = vmeRead32(&fa125p[id]->fe[0].config1);
-  f[0].ptw       = vmeRead32(&fa125p[id]->fe[0].ptw);
+  f[0].nw       = vmeRead32(&fa125p[id]->fe[0].nw);
   f[0].pl        = vmeRead32(&fa125p[id]->fe[0].pl);
-#ifdef NOTHERE
-  f[0].nsb       = vmeRead32(&fa125p[id]->fe[0].nsb);
-  f[0].nsa       = vmeRead32(&fa125p[id]->fe[0].nsa);
-#endif
+  f[0].ie        = vmeRead32(&fa125p[id]->fe[0].ie);
 
   for(i=0; i<12; i++)
     {
@@ -763,8 +760,8 @@ fa125Status(int id, int pflag)
 	   (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
 	   fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
 	   (f[0].config1 & FA125_FE_CONFIG1_ENABLE)?"ENABLED":"DISABLED");
-  printf("   Lookback (PL)    = %d ns   Time Window (PTW) = %d ns\n",
-	 8*f[0].pl, 8*f[0].ptw);
+  printf("   Lookback (PL)    = %d ns   Time Window (NW) = %d ns\n",
+	 8*f[0].pl, 8*f[0].nw);
 #ifdef NOTHERE
   printf("   Time Before Peak = %d ns   Time After Peak   = %d ns\n",
 	 8*f[0].nsb,8*f[0].nsa);
@@ -825,11 +822,8 @@ fa125GStatus(int pflag)
       st[id].fe[0].version = vmeRead32(&fa125p[id]->fe[0].version);
       st[id].fe[0].config1 = vmeRead32(&fa125p[id]->fe[0].config1);
       st[id].fe[0].pl      = vmeRead32(&fa125p[id]->fe[0].pl);
-      st[id].fe[0].ptw     = vmeRead32(&fa125p[id]->fe[0].ptw);
-#ifdef NOTHERE
-      st[id].fe[0].nsa     = vmeRead32(&fa125p[id]->fe[0].nsa);
-      st[id].fe[0].nsb     = vmeRead32(&fa125p[id]->fe[0].nsb);
-#endif
+      st[id].fe[0].nw     = vmeRead32(&fa125p[id]->fe[0].nw);
+      st[id].fe[0].ie      = vmeRead32(&fa125p[id]->fe[0].ie);
     }
   FA125UNLOCK;
 
@@ -933,7 +927,7 @@ fa125GStatus(int pflag)
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
   printf("      Block          ...[nanoseconds]...\n");
-  printf("Slot  Level  Mode    PL   PTW   NSB  NSA  NP   Playback \n");
+  printf("Slot  Level  Mode    PL   NW   NSB  NSA  NP   Playback \n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
@@ -946,7 +940,7 @@ fa125GStatus(int pflag)
 
       printf("%4d ", 8*st[id].fe[0].pl);
 
-      printf("%4d   ", 8*st[id].fe[0].ptw);
+      printf("%4d   ", 8*st[id].fe[0].nw);
 #ifdef NOTHERE
       printf("%3d  ", 8*st[id].fe[0].nsb);
 
@@ -1014,31 +1008,40 @@ fa125GStatus(int pflag)
  *
  *  @param id Slot number
  *  @param pmode  Processing Mode
- *     -     1 - Raw Window
- *     -     2 - Pulse Raw Window      (not supported)
- *     -     3 - Pulse Integral        (not supported)
- *     -     4 - High-resolution time  (not supported)
- *     -     7 - Mode 3 + Mode 4       (not supported)
- *     -     8 - Mode 1 + Mode 4       (not supported)
+ *     -     3 - Pulse Integral and Time (CDC Format)
+ *     -     4 - Pulse Integral and Time (FDC Format)
+ *     -     5 - Peak Amplitude and Time (FDC Format)
+ *     -     6 - Pulse Samples (CDC Format)
+ *     -     7 - Pulse Samples (FDC Format)
  *  @param  PL  Window Latency
- *  @param PTW  Window Width
- *  @param NSB  Number of samples before pulse over threshold
- *  @param NSA  Number of samples after pulse over threshold
- *  @param NP   Number of pulses processed per window
+ *  @param  NW  Window Width
+ *  @param  IE  Integration End
+ *  @param  PG  Pedestal Gap
+ *  @param  NPK Number of pulses processed per window
+ *  @param  P1  Parameter for initial pedestal window (NP = 2^P1)
+ *  @param  P2  Parameter for local pedestal window (NP2 = 2^P2)
  *
- *    Note:
- *     - PL must be greater than PTW
- *     - NSA+NSB must be an odd number
+ *     (1) NW > NP + 6
+ *     (2) NW > NU
+ *     (3) NU > 14
+ *     (4) NE >= NU-PG-PED
+ *     (5) NE >= 6
+ *     (6) NPK > 0
+ *     (7) NP >= NP2
+ *     (8) NP2 > 0
+ *     (9) H > TH > TL
+ *    (10) PED > 4
+ *    (11) PG > 0
+ *    (12) PED+PG < NU
  *
  *  @return OK if successful, otherwise ERROR.
  */
 int
-fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW, 
-		 unsigned int NSB, unsigned int NSA, unsigned int NP)
+fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW, 
+		 unsigned int IE, unsigned int PG, unsigned int NPK,
+		 unsigned int P1, unsigned int P2)
 {
-  int err=0;
-  unsigned int ptw_last_adr, ptw_max_buf;
-  int imode=0, supported_modes[FA125_SUPPORTED_NMODES] = {FA125_SUPPORTED_MODES};
+  int imode=0, supported_modes[FA125_SUPPORTED_NMODES] = FA125_SUPPORTED_MODES;
   int mode_supported=0;
   
   if(id==0) id=fa125ID[0];
@@ -1061,50 +1064,72 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW,
       return ERROR;
     }
 
-  if( (NP==0) || (NP>FA125_MAX_NP)) 
+  /* Defaults */
+  if((PL==0) || (PL>FA125_MAX_PL))
     {
-      printf("%s: ERROR: Invalid Peak count %d (must be 1-%d)\n",
-	     __FUNCTION__,NP,FA125_MAX_NP);
+      PL  = FA125_DEFAULT_PL;
+      printf("%s: WARN: Invalid PL (%d). Setting default (%d)\n",
+	     __FUNCTION__,PL,FA125_DEFAULT_PL);
+    }
+  if((NW==0) || (NW>FA125_MAX_NW)) 
+    {
+      NW = FA125_DEFAULT_NW;
+      printf("%s: WARN: Invalid NW (%d). Setting default (%d)\n",
+	     __FUNCTION__,NW,FA125_DEFAULT_NW);
+    }
+  if((IE==0) || (IE>FA125_MAX_IE))
+    {
+      IE = FA125_DEFAULT_IE;
+      printf("%s: WARN: Invalid IE (%d). Setting default (%d)\n",
+	     __FUNCTION__,IE,FA125_DEFAULT_IE);
+    }
+  if((PG==0) || (PG>FA125_MAX_PG))
+    {
+      PG = FA125_DEFAULT_PG;
+      printf("%s: WARN: Invalid PG (%d). Setting default (%d)\n",
+	     __FUNCTION__,PG,FA125_DEFAULT_PG);
+    }
+  if((NPK==0) || (NPK>FA125_MAX_NPK))
+    {
+      NPK = FA125_DEFAULT_NPK;
+      printf("%s: WARN: Invalid NPK (%d). Setting default (%d)\n",
+	     __FUNCTION__,NPK,FA125_DEFAULT_NPK);
+    }
+
+  /* Consistancy check */
+  if(NW > PL) 
+    {
+      printf("%s: ERROR: Window must be <= Latency\n",__FUNCTION__); 
       return ERROR;
     }
 
-  /* Defaults */
-  if((PL==0)||(PL>FA125_MAX_PL))  PL  = FA125_DEFAULT_PL;
-  if((PTW==0)||(PTW>FA125_MAX_PTW)) PTW = FA125_DEFAULT_PTW;
-  if((NSB==0)||(NSB>FA125_MAX_NSB)) NSB = FA125_DEFAULT_NSB;
-  if((NSA==0)||(NSA>FA125_MAX_NSA)) NSA = FA125_DEFAULT_NSA;
-  if((NP==0)&&(pmode!=FA125_PROC_MODE_RAWWINDOW))  NP = FA125_DEFAULT_NP;
-
-  /* Consistancy check */
-  if(PTW > PL) 
+  if(NW <= ((2^P1) + 6))
     {
-      err++;
-      printf("%s: ERROR: Window must be <= Latency\n",__FUNCTION__); 
-    }
-  if(((NSB+NSA)%2)==0) 
-    {
-      err++;
-      printf("%s: ERROR: NSB+NSA must be an odd number\n",__FUNCTION__); 
+      printf("%s: ERROR: Window must be > Initial Pedestal Window + 6\n",__FUNCTION__); 
+      return ERROR;
     }
 
-  /* Calculate Proc parameters */
-  ptw_max_buf  = (unsigned int) (2016/(PTW + 8));
-  ptw_last_adr = ptw_max_buf * (PTW + 8) - 1;
+  if(P1 < P2)
+    {
+      printf("%s: ERROR: Initial Pedestal Window Must be >= Local Pedestal Window\n",
+	     __FUNCTION__); 
+      return ERROR;
+    }
+
 
   FA125LOCK;
   /* Disable ADC processing while writing window info */
-  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<4)));
+  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NPK<<4)));
   vmeWrite32(&fa125p[id]->fe[0].pl, PL);
-  vmeWrite32(&fa125p[id]->fe[0].ptw, PTW);
-#ifdef NOTHERE
-  vmeWrite32(&fa125p[id]->fe[0].ptw_max_buf, ptw_max_buf);
-  vmeWrite32(&fa125p[id]->fe[0].ptw_last_adr, ptw_last_adr);
-  vmeWrite32(&fa125p[id]->fe[0].nsb, NSB);
-  vmeWrite32(&fa125p[id]->fe[0].nsa, NSA);
-#endif
+  vmeWrite32(&fa125p[id]->fe[0].nw, NW);
+  vmeWrite32(&fa125p[id]->fe[0].ie, IE | (PG<<12));
+  vmeWrite32(&fa125p[id]->fe[0].ped_sf,
+	     (vmeRead32(&fa125p[id]->fe[0].ped_sf) & 
+	      ~(FA125_FE_PED_SF_NP_MASK | FA125_FE_PED_SF_NP2_MASK)) |
+	     (P1 | (P2<<8)) );
 
   /* Enable ADC processing */
-  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NP<<4) | FA125_FE_CONFIG1_ENABLE) );
+  vmeWrite32(&fa125p[id]->fe[0].config1, ((pmode-1) | (NPK<<4) | FA125_FE_CONFIG1_ENABLE) );
 
   FA125UNLOCK;
 
@@ -1130,23 +1155,10 @@ fa125PowerOff (int id)
     }
 
   printf("%s: Power Off for slot %d\n",__FUNCTION__,id);
-#ifdef DEBUG
-  printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
-	 ((unsigned int) &fa125p[id]->main.pwrctl) -
-	 ((unsigned int)&fa125p[id]->main.id),
-	 vmeRead32(&fa125p[id]->main.pwrctl));
-#endif
 
   FA125LOCK;
   vmeWrite32(&fa125p[id]->main.pwrctl, 0);
   FA125UNLOCK;
-
-#ifdef DEBUG
-  printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
-	 ((unsigned int) &fa125p[id]->main.pwrctl) -
-	 ((unsigned int)&fa125p[id]->main.id),
-	 vmeRead32(&fa125p[id]->main.pwrctl));
-#endif
 
   return OK;
 }
@@ -1170,23 +1182,10 @@ fa125PowerOn (int id)
 
   printf("%s: Power On (0x%08x) for slot %d\n",__FUNCTION__,
 	 FA125_PWRCTL_KEY_ON,id);
-#ifdef DEBUG
-  printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
-	 ((unsigned int) &fa125p[id]->main.pwrctl) -
-	 ((unsigned int)&fa125p[id]->main.id),
-	 vmeRead32(&fa125p[id]->main.pwrctl));
-#endif
 
   FA125LOCK;
   vmeWrite32(&fa125p[id]->main.pwrctl, FA125_PWRCTL_KEY_ON);
   FA125UNLOCK;
-
-#ifdef DEBUG
-  printf("%s: pwrctl (0x%08x)= 0x%08x\n",__FUNCTION__,
-	 ((unsigned int) &fa125p[id]->main.pwrctl) -
-	 ((unsigned int)&fa125p[id]->main.id),
-	 vmeRead32(&fa125p[id]->main.pwrctl));
-#endif
 
 #ifdef VXWORKS
   taskDelay(18);
@@ -4084,19 +4083,6 @@ fa125FirmwareReadMcsFile(char *filename)
 		    {
 		      ibyte++;
 		    }
-#ifdef OLDWAY
-		  if(fpga_bytes==sfpga[ifpga].size)
-		    { 
-		      /* End of this FPGA, Skip to the Next */
-		      ifpga++;
-		      if(ifpga!=NFPGATYPE) 
-			{
-			  ipage = sfpga[ifpga].page_location;
-			  ibyte = sfpga[ifpga].page_byte_location;
-			  fpga_bytes=0;
-			}
-		    }
-#endif
 		  readMCS++;
 		  nbytes++;
 		}
@@ -4897,14 +4883,14 @@ fa125FirmwareGCheckErrors()
 
 const char *fa125_mode_names[FA125_MAXIMUM_NMODES] = 
   {
-    "Raw Window Mode",     // 0 
-    "Raw Pulse Mode",      // 1
-    "Pulse Integral Mode", // 2
-    "High Rez TDC",        // 3
-    "", // 4
-    "", // 5
-    "Integral TDC",        // 6
-    "Raw Data TDC",        // 7
+    "", // 0 
+    "", // 1
+    "Integral and Time (CDC)",       // 2
+    "Integral and Time (FDC)",       // 3
+    "Peak Amplitude and Time (FDC)", // 4
+    "Pulse Samples (CDC)",           // 5
+    "Pulse Samples(FDC)",            // 6
+    "", // 7
     "", // 8
     ""  // 9
   };

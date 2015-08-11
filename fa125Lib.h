@@ -61,7 +61,7 @@ struct fa125_a24_fe
   /* 0xN000 */ volatile UINT32 version;
   /* 0xN004 */ volatile UINT32 test;
   /* 0xN008 */          UINT32 blank0[(0x58-0x08)/4];
-  /* 0xN058 */ volatile UINT32 ptw;
+  /* 0xN058 */ volatile UINT32 nw;
   /* 0xN05C */ volatile UINT32 pl;
   /* 0xN060 */          UINT32 blank1[(0x70-0x60)/4];
   /* 0xN070 */ volatile UINT32 threshold[6];
@@ -73,7 +73,7 @@ struct fa125_a24_fe
   /* 0xN09C */ volatile UINT32 ppg_trig_delay;
   /* 0xN0A0 */ volatile UINT32 ped_sf;
   /* 0xN0A4 */ volatile UINT32 timing_thres[3];
-  /* 0xN0B0 */ volatile UINT32 integration_end;
+  /* 0xN0B0 */ volatile UINT32 ie;
   /* 0xN0B4 */          UINT32 blank3[(0x1000-0xB4)/4];
 };
 
@@ -121,11 +121,6 @@ struct fa125_a32
 #define FA125_DACCTL_DACSCLK_MASK  (1<<1)
 #define FA125_DACCTL_ADACSI_MASK   (1<<2)
 #define FA125_DACCTL_BDACSI_MASK   (1<<3)
-
-#ifdef DOESNOTEXIST
-/* main CSR register definitions */
-#define FA125_MAIN_CSR_TEST_TRIGGER (1<<2)
-#endif
 
 /* 0x0c clock register definitions */
 #define FA125_CLOCK_P2               (0)
@@ -186,8 +181,8 @@ struct fa125_a32
 #define FA125_FE_TEST_COLLECT_ON       (1<<1)
 #define FA125_FE_TEST_SYNCRESET_ENABLE (1<<2)
 
-/* 0x1058 FE ptw register defintions */
-#define FA125_FE_PTW_MASK          0x000003FF
+/* 0x1058 FE nw register defintions */
+#define FA125_FE_NW_MASK          0x000003FF
 
 /* 0x105C FE pl register defintions */
 #define FA125_FE_PL_MASK           0x0000FFFF
@@ -351,27 +346,38 @@ typedef enum
   } FA125_FIRMWARE_ERROR_FLAGS;
 
 /* Default, maximum and minimum ADC Processing parameters */
-#define FA125_DEFAULT_PL     50
-#define FA125_DEFAULT_PTW    50
-#define FA125_DEFAULT_NSB     5
-#define FA125_DEFAULT_NSA    10
-#define FA125_DEFAULT_NP      1
+#define FA125_DEFAULT_PL    500
+#define FA125_DEFAULT_NW    120
+#define FA125_DEFAULT_IE    200
+#define FA125_DEFAULT_PG      4
+#define FA125_DEFAULT_NPK     1
+#define FA125_DEFAULT_P1      4
+#define FA125_DEFAULT_P2      4
 
-#define FA125_MAX_PL       1000
-#define FA125_MAX_PTW       512
-#define FA125_MAX_NSB       500
-#define FA125_MAX_NSA       500
-#define FA125_MAX_NP          3
+
+#define FA125_MAX_PL      65535
+#define FA125_MAX_NW       1024
+#define FA125_MAX_IE       1023
+#define FA125_MAX_PG          7
+#define FA125_MAX_NPK        15
+#define FA125_MAX_P1          7
+#define FA125_MAX_P2          7
 
 /* Processing Modes */
 #define FA125_PROC_MODE_RAWWINDOW          1
 #define FA125_PROC_MODE_PULSERAW           2
-#define FA125_PROC_MODE_INTEGRAL           3
-#define FA125_PROC_MODE_TDC                4
-#define FA125_PROC_MODE_INTEGRAL_TDC       7
-#define FA125_PROC_MODE_RAWDATA_TDC        8
-#define FA125_SUPPORTED_MODES FA125_PROC_MODE_RAWWINDOW,FA125_PROC_MODE_PULSERAW,FA125_PROC_MODE_INTEGRAL,FA125_PROC_MODE_TDC,FA125_PROC_MODE_INTEGRAL_TDC,FA125_PROC_MODE_RAWDATA_TDC
-#define FA125_SUPPORTED_NMODES 6
+#define FA125_PROC_MODE_CDC_INTEGRAL       3
+#define FA125_PROC_MODE_FDC_INTEGRAL       4
+#define FA125_PROC_MODE_FDC_PEAKAMP        5
+#define FA125_PROC_MODE_CDC_PULSESAMPLES   6
+#define FA125_PROC_MODE_FDC_PULSESAMPLES   7
+#define FA125_SUPPORTED_MODES \
+  {FA125_PROC_MODE_CDC_INTEGRAL,					\
+      FA125_PROC_MODE_FDC_INTEGRAL,					\
+      FA125_PROC_MODE_FDC_PEAKAMP,					\
+      FA125_PROC_MODE_CDC_PULSESAMPLES,					\
+      FA125_PROC_MODE_FDC_PULSESAMPLES}
+#define FA125_SUPPORTED_NMODES 5
 #define FA125_MAXIMUM_NMODES   10
 
 extern const char *fa125_mode_names[FA125_MAXIMUM_NMODES];
@@ -380,11 +386,11 @@ extern const char *fa125_mode_names[FA125_MAXIMUM_NMODES];
 typedef enum
   {
     FA125_BLOCKERROR_NO_ERROR          = 0,
-    FA125_BLOCKERROR_TERM_ON_WORDCOUNT = 1,
-    FA125_BLOCKERROR_UNKNOWN_BUS_ERROR = 2,
-    FA125_BLOCKERROR_ZERO_WORD_COUNT   = 3,
-    FA125_BLOCKERROR_DMADONE_ERROR     = 4,
-    FA125_BLOCKERROR_NTYPES            = 5
+    FA125_BLOCKERROR_TERM_ON_WORDCOUNT,
+    FA125_BLOCKERROR_UNKNOWN_BUS_ERROR,
+    FA125_BLOCKERROR_ZERO_WORD_COUNT,
+    FA125_BLOCKERROR_DMADONE_ERROR,
+    FA125_BLOCKERROR_NTYPES
   } FA125_BLOCKERROR_FLAGS;
 
 extern const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES];
@@ -392,8 +398,9 @@ extern const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES];
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id, int pflag);
 void fa125GStatus(int pflag);
-int  fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int PTW, 
-		      unsigned int NSB, unsigned int NSA, unsigned int NP);
+int  fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW, 
+		      unsigned int IE, unsigned int PG, unsigned int NPK,
+		      unsigned int P1, unsigned int P2);
 int  fa125Slot(unsigned int i);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
