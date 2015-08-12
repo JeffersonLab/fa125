@@ -507,6 +507,12 @@ fa125CheckAddresses(int id)
 	       __FUNCTION__,id,ife,expected,offset);
     }
 
+  offset = ((unsigned int) &fa125p[id]->fe[0].ie) - base;
+  expected = 0x10b0;
+  if(offset != expected)
+    printf("%s: ERROR fa125p[%d]->fe[0].ie not at offset = 0x%x (@ 0x%x)\n",
+	   __FUNCTION__,id,expected,offset);
+
   offset = ((unsigned int) &fa125p[id]->proc) - base;
   expected = 0xD000;
   if(offset != expected)
@@ -767,8 +773,8 @@ fa125Status(int id, int pflag)
 	 8*(f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK),
 	 8*((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
   printf("   Initial Pedestal Width (NP) = %4d ns   Local Pedestal Width (NP2) = %4d ns\n",
-	 8*((f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
-	 8*((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8));
+	 8*(1<<(f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	 8*(1<<((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)));
   printf("\n");
   printf("   Scale Factors:\n");
   printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n\n",
@@ -833,8 +839,9 @@ fa125GStatus(int pflag)
       st[id].fe[0].version = vmeRead32(&fa125p[id]->fe[0].version);
       st[id].fe[0].config1 = vmeRead32(&fa125p[id]->fe[0].config1);
       st[id].fe[0].pl      = vmeRead32(&fa125p[id]->fe[0].pl);
-      st[id].fe[0].nw     = vmeRead32(&fa125p[id]->fe[0].nw);
+      st[id].fe[0].nw      = vmeRead32(&fa125p[id]->fe[0].nw);
       st[id].fe[0].ie      = vmeRead32(&fa125p[id]->fe[0].ie);
+      st[id].fe[0].ped_sf  = vmeRead32(&fa125p[id]->fe[0].ped_sf);
     }
   FA125UNLOCK;
 
@@ -958,9 +965,9 @@ fa125GStatus(int pflag)
 
       printf("%3d  ", 8*((st[id].fe[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
 
-      printf("%4d ", 1<<(st[id].fe[0].ped_sf & FA125_FE_PED_SF_NP_MASK) );
+      printf("%4d ", 8*(1<<(st[id].fe[0].ped_sf & FA125_FE_PED_SF_NP_MASK)) );
 
-      printf("%4d    ", 1<<((st[id].fe[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8) );
+      printf("%4d    ", 8*(1<<((st[id].fe[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)) );
 
       printf("%d  ", (st[id].fe[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16);
 
@@ -1188,10 +1195,10 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int 
     }
 
   FA125LOCK;
-  vmeWrite32(&fa125p[id]->fe[0].ped_sf,
+  vmeWrite32(&fa125p[id]->fe[0].ped_sf, 
 	     (vmeRead32(&fa125p[id]->fe[0].ped_sf) & 
 	      (FA125_FE_PED_SF_NP_MASK | FA125_FE_PED_SF_NP2_MASK)) |
-	     (IBIT<<16) | (ABIT<<19) || (PBIT<<22));
+	     (IBIT<<16) | (ABIT<<19) | (PBIT<<22) );
   FA125UNLOCK;
 
   return OK;
@@ -1285,6 +1292,7 @@ fa125GetPedestalScaleFactor(int id)
 int
 fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int hi)
 {
+  unsigned int wval = 0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1317,15 +1325,17 @@ fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int
   FA125LOCK;
   if(chan%2==0)
     {
-      vmeWrite32(&fa125p[id]->fe[chan/6].threshold[chan%6],
-		 (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF0000) |
-		 (hi | (lo<<8)));
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF0000) |
+	((hi) | (lo<<8));
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
+		 wval);
     }
   else
     {
-      vmeWrite32(&fa125p[id]->fe[chan/6].threshold[chan%6],
-		 (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF) |
-		 ((hi<<16) | (lo<<24)));
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF) |
+	((hi<<16) | (lo<<24));
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
+		 wval);
     }
   FA125UNLOCK;
 
@@ -1342,7 +1352,7 @@ fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int
 int
 fa125GetTimingThreshold(int id, unsigned int chan)
 {
-  int rval=0;
+  unsigned int rval=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1361,15 +1371,15 @@ fa125GetTimingThreshold(int id, unsigned int chan)
   FA125LOCK;
   if(chan%2==0)
     {
-      rval = (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF);
+      rval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF);
     }
   else
     {
-      rval = (vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & 0xFFFF0000)>>16;
+      rval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF0000)>>16;
     }
   FA125UNLOCK;
 
-  return rval;
+  return (int)rval;
 }
 
 
