@@ -11,10 +11,10 @@
 #
 
 ifndef LINUXVME_LIB
-	LINUXVME_LIB	= $CODA/extensions/linuxvme/libs
+	LINUXVME_LIB	= ${CODA}/extensions/linuxvme/libs
 endif
 ifndef LINUXVME_INC
-	LINUXVME_INC	= $CODA/extensions/linuxvme/include
+	LINUXVME_INC	= ${CODA}/extensions/linuxvme/include
 endif
 
 CROSS_COMPILE		=
@@ -24,7 +24,7 @@ RANLIB                  = ranlib
 CFLAGS			= -Wall -g -O2 -I${LINUXVME_INC} -I. -I/usr/include \
 			  -L${LINUXVME_LIB} -L.
 
-PROGS			= adc125LibTest
+PROGS			= fa125FirmwareTest fa125HardReset fa125PulserTest
 
 
 all: $(PROGS)
@@ -35,10 +35,13 @@ adc125LibTest.o: adc125LibTest.c
 adc125LibTest2.o: adc125LibTest2.c
 	$(CC) -c $(CFLAGS) $(INCS) -o $@ $<
 
+fa125ReadoutTest_write: fa125ReadoutTest_write.c
+	$(CC) $(CFLAGS) $(INCS) -lsd -lrt -ljvme -lfa125 -lti -lts -o $@ $<
+
 clean distclean:
 	@rm -f $(PROGS) *~ *.so
 
 %: %.c
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -lfa125 -lti
+	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125 -lti -lts -lsd -lctp -lf1tm
 
 .PHONY: all clean distclean

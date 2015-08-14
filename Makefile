@@ -33,6 +33,9 @@ ifeq ($(ARCH),VXWORKSPPC)
 VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
 
 DEFS   = -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall -fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
+ifdef DEBUG
+DEFS  += -Wall -g
+endif
 INCS   = -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
 CC     = ccppc $(INCS) $(DEFS)
 LD     = ldppc
@@ -52,15 +55,15 @@ endif
 # Defs and build for Linux
 ifeq ($(ARCH),Linux)
 
-LINUXVME_LIB		?= ${CODA}/extensions/linuxvme/libs
-LINUXVME_INC		?= ${CODA}/extensions/linuxvme/include
+LINUXVME_LIB		?= ${CODA}/linuxvme/lib
+LINUXVME_INC		?= ${CODA}/linuxvme/include
 
 CROSS_COMPILE           = 
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
 CFLAGS			= -I. -I${LINUXVME_INC} -I/usr/include \
-			  -L${LINUXVME_LIB} -L.
+			  -L. -L${LINUXVME_LIB} 
 ifdef DEBUG
 CFLAGS			+= -Wall -g
 else
@@ -71,7 +74,10 @@ OBJS			= fa125Lib.o
 
 LIBS			= libfa125.a
 
-all: $(LIBS) links
+all: $(LIBS)
+
+fa125Lib.o: fa125Lib.c fa125Lib.h Makefile
+	$(CC) -c $(CFLAGS) -o $@ fa125Lib.c
 
 libfa125.a: fa125Lib.o
 	$(CC) -fpic -shared $(CFLAGS) -o libfa125.so fa125Lib.c
@@ -85,6 +91,11 @@ links: libfa125.a
 	ln -sf $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
 	ln -sf $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
 	ln -sf $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
+
+install: libfa125.a
+	@cp -v $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
+	@cp -v $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
+	@cp -v $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
 
 %: %.c libfa125.a
 	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -lfa125
