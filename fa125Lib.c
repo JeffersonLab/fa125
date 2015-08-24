@@ -3345,7 +3345,35 @@ fa125DecodeData(unsigned int data)
 	    }    
 	  break;
 
-	case 4:/* PULSE DATA, CDC */
+	case 4:/* WINDOW RAW DATA */
+          if( fadc_data.new_type )
+            {
+              fadc_data.chan = (data & 0x7F00000) >> 20;
+	      fadc_data.width = (data & 0xFFF);
+              if( i_print ) 
+		printf("%8X - WINDOW RAW DATA - chan = %2d   width = %d\n", 
+		       data, fadc_data.chan, fadc_data.width);
+              nsamples=0;
+            }    
+          else
+            {
+	      fadc_data.valid_1 = 1;
+	      fadc_data.valid_2 = 1;
+	      fadc_data.adc_1 = (data & 0x1FFF0000) >> 16;
+	      if( data & 0x20000000 )
+		fadc_data.valid_1 = 0;
+	      fadc_data.adc_2 = (data & 0x1FFF);
+	      if( data & 0x2000 )
+		fadc_data.valid_2 = 0;
+              if( i_print ) 
+		printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %4d (%03X)  valid = %d  adc = %4d (%03X)\n", 
+		       data, nsamples,fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
+		       fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
+              nsamples += 2;
+            }    
+          break;
+
+	case 5:/* PULSE DATA, CDC */
 	  if( fadc_data.new_type )
 	    {
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
@@ -3356,7 +3384,6 @@ fa125DecodeData(unsigned int data)
 		printf("%8X - PULSE DATA (CDC IT) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
 		       data, fadc_data.chan, fadc_data.le_time,
 		       fadc_data.time_quality, fadc_data.overflow_cnt);
-	      nsamples=0;
 	    }    
 	  else
 	    {
@@ -3366,11 +3393,10 @@ fa125DecodeData(unsigned int data)
 	      if( i_print ) 
 		printf("%8X - PULSE DATA (CDC IT) - ped = %d  integral = %d  firstmax ampl = %d\n", 
 		       data, fadc_data.pedestal, fadc_data.integral, fadc_data.fm_amplitude);
-	      nsamples += 2;
 	    }    
 	  break;
 
-	case 5:/* PULSE DATA, FDC - Integral and Time */
+	case 6:/* PULSE DATA, FDC - Integral and Time */
 	  if( fadc_data.new_type )
 	    {
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
@@ -3381,7 +3407,6 @@ fa125DecodeData(unsigned int data)
 		printf("%8X - PULSE DATA (FDC IT) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
 		       data, fadc_data.chan, fadc_data.le_time,
 		       fadc_data.time_quality, fadc_data.overflow_cnt);
-	      nsamples=0;
 	    }    
 	  else
 	    {
@@ -3391,11 +3416,10 @@ fa125DecodeData(unsigned int data)
 	      if( i_print ) 
 		printf("%8X - PULSE DATA (FDC IT) - ped = %d  integral = %d  firstmax ampl = %d\n", 
 		       data, fadc_data.pedestal, fadc_data.integral, fadc_data.fm_amplitude);
-	      nsamples += 2;
 	    }    
 	  break;
 
-	case 6:/* PULSE DATA, FDC - Peak Ampl and Time */
+	case 9:/* PULSE DATA, FDC - Peak Ampl and Time */
 	  if( fadc_data.new_type )
 	    {
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
@@ -3406,7 +3430,6 @@ fa125DecodeData(unsigned int data)
 		printf("%8X - PULSE DATA (FDC AT) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
 		       data, fadc_data.chan, fadc_data.le_time,
 		       fadc_data.time_quality, fadc_data.overflow_cnt);
-	      nsamples=0;
 	    }    
 	  else
 	    {
@@ -3416,100 +3439,11 @@ fa125DecodeData(unsigned int data)
 	      if( i_print ) 
 		printf("%8X - PULSE DATA (FDC AT) - Ampl = %d  Time = %d  Pedestal = %d\n", 
 		       data, fadc_data.peak_amplitude, fadc_data.peak_time, fadc_data.pedestal);
-	      nsamples += 2;
 	    }    
 	  break;
 
-	case 7:/* Pulse Data and Raw Samples (CDC) */
-	  if( fadc_data.new_type )
-	    {
-	      fadc_data.chan = (data & 0x7F00000) >> 20;
-	      fadc_data.le_time = (data & 0x7FF0)>>4;
-	      fadc_data.time_quality = (data & (1<<3))>>3;
-	      fadc_data.overflow_cnt = (data & 0x7);
-	      if( i_print ) 
-		printf("%8X - PULSE DATA (CDC ITR) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
-		       data, fadc_data.chan, fadc_data.le_time,
-		       fadc_data.time_quality, fadc_data.overflow_cnt);
-	      nsamples=0;
-	      goto_raw=0;
-	    }    
-	  else
-	    {
-	      if(goto_raw==0)
-		{
-		  fadc_data.pedestal = (data & 0x7F800000)>>23;
-		  fadc_data.integral = (data & 0x007FFE00)>>9;
-		  fadc_data.fm_amplitude = (data & 0x000001FF);
-		  if( i_print ) 
-		    printf("%8X - PULSE DATA (CDC ITR) - ped = %d  integral = %d  firstmax ampl = %d\n", 
-			   data, fadc_data.pedestal, fadc_data.integral, fadc_data.fm_amplitude);
-		  nsamples += 2;
-		  goto_raw=1;
-		}
-	      else
-		{
-		  fadc_data.valid_1 = 1;
-		  fadc_data.valid_2 = 1;
-		  fadc_data.adc_1 = (data & 0x1FFF0000) >> 16;
-		  if( data & 0x20000000 )
-		    fadc_data.valid_1 = 0;
-		  fadc_data.adc_2 = (data & 0x1FFF);
-		  if( data & 0x2000 )
-		    fadc_data.valid_2 = 0;
-		  if( i_print ) 
-		    printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %4d (%03X)  valid = %d  adc = %4d (%03X)\n", 
-			   data, nsamples,fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
-			   fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
-		}
-	    }
-	  break;
-
-	case 8:/* PULSE TIME */
-	  if( fadc_data.new_type )
-	    {
-	      fadc_data.chan = (data & 0x7F00000) >> 20;
-	      fadc_data.le_time = (data & 0x7FF0)>>4;
-	      fadc_data.time_quality = (data & (1<<3))>>3;
-	      fadc_data.overflow_cnt = (data & 0x7);
-	      if( i_print ) 
-		printf("%8X - PULSE DATA (FDC IT) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
-		       data, fadc_data.chan, fadc_data.le_time,
-		       fadc_data.time_quality, fadc_data.overflow_cnt);
-	      nsamples=0;
-	      goto_raw=0;
-	    }    
-	  else
-	    {
-	      if(goto_raw==0)
-		{
-		  fadc_data.pedestal = (data & 0x7F800000)>>23;
-		  fadc_data.integral = (data & 0x007FFE00)>>9;
-		  fadc_data.fm_amplitude = (data & 0x000001FF);
-		  if( i_print ) 
-		    printf("%8X - PULSE DATA (FDC IT) - ped = %d  integral = %d  firstmax ampl = %d\n", 
-			   data, fadc_data.pedestal, fadc_data.integral, fadc_data.fm_amplitude);
-		  nsamples += 2;
-		  goto_raw=1;
-		}    
-	      else
-		{
-		  fadc_data.valid_1 = 1;
-		  fadc_data.valid_2 = 1;
-		  fadc_data.adc_1 = (data & 0x1FFF0000) >> 16;
-		  if( data & 0x20000000 )
-		    fadc_data.valid_1 = 0;
-		  fadc_data.adc_2 = (data & 0x1FFF);
-		  if( data & 0x2000 )
-		    fadc_data.valid_2 = 0;
-		  if( i_print ) 
-		    printf("%8X - RAW SAMPLES (%3d) - valid = %d  adc = %4d (%03X)  valid = %d  adc = %4d (%03X)\n", 
-			   data, nsamples,fadc_data.valid_1, fadc_data.adc_1, fadc_data.adc_1, 
-			   fadc_data.valid_2, fadc_data.adc_2, fadc_data.adc_2);
-		}
-	    }
-
-	case 9:
+	case 7:
+	case 8:
 	case 10:
 	case 11:
 	case 12:/* UNDEFINED TYPE */
