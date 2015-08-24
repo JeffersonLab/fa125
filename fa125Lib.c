@@ -3251,6 +3251,7 @@ fa125DecodeData(unsigned int data)
   static unsigned int slot_id_fill = 0;
 
   static int nsamples=0;
+  static int goto_raw=0;
 
   int i_print =1;
   
