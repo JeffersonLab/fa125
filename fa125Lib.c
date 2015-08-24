@@ -61,9 +61,9 @@ volatile struct fa125_a24 *fa125p[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 me
 volatile struct fa125_a32 *fa125pd[(FA125_MAX_BOARDS+1)]; /* pointers to FA125 FIFO memory */
 volatile unsigned int *FA125pmb;                        /* pointer to Multblock window */
 int fa125ID[FA125_MAX_BOARDS]; /* array of slot numbers for FA125s */
-int fa125A32Base   = 0x09000000;                      /* Minimum VME A32 Address for use by FA125s */
-int fa125A32Offset = 0x08000000;                      /* Difference in CPU A32 Base - VME A32 Base */
-int fa125A24Offset=0;                            /* Difference in CPU A24 Base and VME A24 Base */
+unsigned int fa125A32Base   = 0x09000000;                      /* Minimum VME A32 Address for use by FA125s */
+unsigned long fa125A32Offset = 0x08000000;                      /* Difference in CPU A32 Base - VME A32 Base */
+unsigned long fa125A24Offset=0;                            /* Difference in CPU A24 Base and VME A24 Base */
 unsigned int fa125AddrList[FA125_MAX_BOARDS];            /* array of a24 addresses for FA125s */
 int fa125MaxSlot=0;                                   /* Highest Slot hold an FA125 */
 int fa125MinSlot=0;                                   /* Lowest Slot holding an FA125 */
@@ -129,7 +129,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 {
   int res=0;
   volatile unsigned int rdata=0;
-  unsigned int laddr=0, a32addr=0;
+  unsigned long laddr=0;
+  unsigned int a32addr=0;
   volatile struct fa125_a24 *fa125;
   int useList=0, noBoardInit=0, noFirmwareCheck=0;
   int nfind=0, islot=0, FA_SLOT=0, ii=0;
@@ -339,10 +340,10 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	      fa125p[boardID] = (struct fa125_a24 *) (fa125AddrList[islot]+fa125A24Offset);
 	      fa125ID[nfa125] = boardID;
 
-	      printf("Initialized FA125 %2d  Slot # %2d at address 0x%08x (0x%08x)\n",
+	      printf("Initialized FA125 %2d  Slot # %2d at address 0x%08lx (0x%08x)\n",
 		     nfa125,fa125ID[nfa125],
-		     (unsigned int)fa125p[fa125ID[nfa125]],
-		     (unsigned int)fa125p[fa125ID[nfa125]] - fa125A24Offset);
+		     (unsigned long)fa125p[fa125ID[nfa125]],
+		     (unsigned int)((unsigned long)fa125p[fa125ID[nfa125]] - fa125A24Offset));
 	      
 	    }
 	  nfa125++;
@@ -484,7 +485,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 void
 fa125CheckAddresses(int id)
 {
-  unsigned int offset=0, expected=0, base=0;
+  unsigned int offset=0, expected=0;
+  unsigned long base=0;
   int ife=0;
 
   if(id==0) id=fa125ID[0];
@@ -496,30 +498,30 @@ fa125CheckAddresses(int id)
   
   printf("%s:\n\t ---------- Checking FA125 address space ---------- \n",__FUNCTION__);
 
-  base = (unsigned int) &fa125p[id]->main;
+  base = (unsigned long) &fa125p[id]->main;
 
   for(ife=0; ife<12; ife++)
     {
-      offset = ((unsigned int) &fa125p[id]->fe[ife]) - base;
+      offset = ((unsigned long) &fa125p[id]->fe[ife]) - base;
       expected = 0x1000 + ife*0x1000;
       if(offset != expected)
 	printf("%s: ERROR fa125p[%d]->fe[%d] not at offset = 0x%x (@ 0x%x)\n",
 	       __FUNCTION__,id,ife,expected,offset);
     }
 
-  offset = ((unsigned int) &fa125p[id]->fe[0].ie) - base;
+  offset = ((unsigned long) &fa125p[id]->fe[0].ie) - base;
   expected = 0x10b0;
   if(offset != expected)
     printf("%s: ERROR fa125p[%d]->fe[0].ie not at offset = 0x%x (@ 0x%x)\n",
 	   __FUNCTION__,id,expected,offset);
 
-  offset = ((unsigned int) &fa125p[id]->proc) - base;
+  offset = ((unsigned long) &fa125p[id]->proc) - base;
   expected = 0xD000;
   if(offset != expected)
     printf("%s: ERROR fa125p[%d]->proc not at offset = 0x%x (@ 0x%x)\n",
 	   __FUNCTION__,id,expected,offset);
 
-  offset = ((unsigned int) &fa125p[id]->proc.trigsrc) - base;
+  offset = ((unsigned long) &fa125p[id]->proc.trigsrc) - base;
   expected = 0xD008;
   if(offset != expected)
     printf("%s: ERROR fa125p[%d]->proc.trigsrc not at offset = 0x%x (@ 0x%x)\n",
@@ -635,8 +637,8 @@ fa125Status(int id, int pflag)
   printf("\nSTATUS for FA125 in slot %d at base address 0x%x \n",
 	 id, (UINT32) fa125p[id]);
 #else
-  printf("\nSTATUS for FA125 in slot %d at VME (Local) base address 0x%x (0x%x)\n",
-	 id, (UINT32) fa125p[id] - fa125A24Offset, (UINT32) fa125p[id]);
+  printf("\nSTATUS for FA125 in slot %d at VME (Local) base address 0x%x (0x%lx)\n",
+	 id, (UINT32)((unsigned long)fa125p[id] - fa125A24Offset), (unsigned long) fa125p[id]);
 #endif
   printf("---------------------------------------------------------------------- \n");
   printf(" Main Firmware Revision     = 0x%08x\n",
@@ -653,31 +655,31 @@ fa125Status(int id, int pflag)
   if(showregs)
     {
       printf("Registers:\n");
-      printf("  blockCSR       (0x%04x) = 0x%08x\t", 
-	     (unsigned int)(&fa125p[id]->main.blockCSR) - faBase, m.blockCSR);
-      printf("  ctrl1          (0x%04x) = 0x%08x\n", 
-	     (unsigned int)(&fa125p[id]->main.ctrl1) - faBase, m.ctrl1);
-      printf("  adr32          (0x%04x) = 0x%08x\t", 
-	     (unsigned int)(&fa125p[id]->main.adr32) - faBase, m.adr32);
-      printf("  adr_mb         (0x%04x) = 0x%08x\n", 
-	     (unsigned int)(&fa125p[id]->main.adr_mb) - faBase, m.adr_mb);
-      printf("  trigsrc        (0x%04x) = 0x%08x\t", 
-	     (unsigned int)(&fa125p[id]->proc.trigsrc) - faBase, p.trigsrc);
+      printf("  blockCSR       (0x%04lx) = 0x%08x\t", 
+	     (unsigned long)(&fa125p[id]->main.blockCSR) - faBase, m.blockCSR);
+      printf("  ctrl1          (0x%04lx) = 0x%08x\n", 
+	     (unsigned long)(&fa125p[id]->main.ctrl1) - faBase, m.ctrl1);
+      printf("  adr32          (0x%04lx) = 0x%08x\t", 
+	     (unsigned long)(&fa125p[id]->main.adr32) - faBase, m.adr32);
+      printf("  adr_mb         (0x%04lx) = 0x%08x\n", 
+	     (unsigned long)(&fa125p[id]->main.adr_mb) - faBase, m.adr_mb);
+      printf("  trigsrc        (0x%04lx) = 0x%08x\t", 
+	     (unsigned long)(&fa125p[id]->proc.trigsrc) - faBase, p.trigsrc);
 
-      printf("  clock          (0x%04x) = 0x%08x\n", 
-	     (unsigned int)(&fa125p[id]->main.clock) - faBase, m.clock);
+      printf("  clock          (0x%04lx) = 0x%08x\n", 
+	     (unsigned long)(&fa125p[id]->main.clock) - faBase, m.clock);
 
-      printf("  config1        (0x%04x) = 0x%08x\n", 
-	     (unsigned int)(&fa125p[id]->fe[0].config1) - faBase, f[0].config1);
+      printf("  config1        (0x%04lx) = 0x%08x\n", 
+	     (unsigned long)(&fa125p[id]->fe[0].config1) - faBase, f[0].config1);
 
       printf("\n");
 
       for(i=0; i<12; i=i+2)
 	{
-	  printf("  test %2d        (0x%04x) = 0x%08x\t", i,
-		 (unsigned int)(&fa125p[id]->fe[i].test) - faBase, f[i].test);
-	  printf("  test %2d        (0x%04x) = 0x%08x\n", i+1,
-		 (unsigned int)(&fa125p[id]->fe[i+1].test) - faBase, f[i+1].test);
+	  printf("  test %2d        (0x%04lx) = 0x%08x\t", i,
+		 (unsigned long)(&fa125p[id]->fe[i].test) - faBase, f[i].test);
+	  printf("  test %2d        (0x%04lx) = 0x%08x\n", i+1,
+		 (unsigned long)(&fa125p[id]->fe[i+1].test) - faBase, f[i+1].test);
 	}
 
       printf("\n");
@@ -687,8 +689,8 @@ fa125Status(int id, int pflag)
     {
       printf(" Alternate VME Addressing: Multiblock Enabled\n");
       if(m.adr32&FA125_ADR32_ENABLE)
-	printf("   A32 Enabled at VME (Local) base 0x%08x (0x%08x)\n",a32Base,
-	       (UINT32) fa125pd[id]);
+	printf("   A32 Enabled at VME (Local) base 0x%08x (0x%08lx)\n",a32Base,
+	       (unsigned long) fa125pd[id]);
       else
 	printf("   A32 Disabled\n");
     
@@ -698,8 +700,8 @@ fa125Status(int id, int pflag)
     {
       printf(" Alternate VME Addressing: Multiblock Disabled\n");
       if(m.adr32&FA125_ADR32_ENABLE)
-	printf("   A32 Enabled at VME (Local) base 0x%08x (0x%08x)\n",a32Base,
-	       (UINT32) fa125pd[id]);
+	printf("   A32 Enabled at VME (Local) base 0x%08x (0x%08lx)\n",a32Base,
+	       (unsigned long) fa125pd[id]);
       else
 	printf("   A32 Disabled\n");
     }
@@ -1682,7 +1684,7 @@ fa125ReadOffsetToFile(int id, char *filename)
  *  @return OK if successful, otherwise ERROR.
  */
 int
-fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan)
+fa125SetThreshold(int id, unsigned short chan, unsigned short tvalue)
 {
   if(id==0) id=fa125ID[0];
 
@@ -3004,16 +3006,16 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	      FA125UNLOCK;
 	      return(ERROR);
 	    }
-	  vmeAdr = (unsigned int)(FA125pmb) - fa125A32Offset;
+	  vmeAdr = (unsigned int)((unsigned long)(FA125pmb) - fa125A32Offset);
 	}
       else
 	{
-	  vmeAdr = (unsigned int)(fa125pd[id]) - fa125A32Offset;
+	  vmeAdr = (unsigned int)((unsigned long)fa125pd[id] - fa125A32Offset);
 	}
 #ifdef VXWORKS
       retVal = sysVmeDmaSend((UINT32)laddr, vmeAdr, (nwrds<<2), 0);
 #else
-      retVal = vmeDmaSend((UINT32)laddr, vmeAdr, (nwrds<<2));
+      retVal = vmeDmaSend((unsigned long)laddr, vmeAdr, (nwrds<<2));
 #endif
       if(retVal != 0) 
 	{
@@ -3249,8 +3251,6 @@ fa125DecodeData(unsigned int data)
   static unsigned int slot_id_fill = 0;
 
   static int nsamples=0;
-
-  static unsigned int goto_raw = 0;
 
   int i_print =1;
   

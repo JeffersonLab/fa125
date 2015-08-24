@@ -415,7 +415,7 @@ int  fa125SetOffset(int id, int chan, int dacData);
 int  fa125SetOffsetFromFile(int id, char *filename);
 unsigned short fa125ReadOffset(int id, int chan);
 int  fa125ReadOffsetToFile(int id, char *filename);
-int  fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan);
+int  fa125SetThreshold(int id, unsigned short chan, unsigned short tvalue);
 int  fa125SetChannelDisable(int id, int channel);
 int  fa125SetChannelDisableMask(int id, unsigned int cmask0, unsigned int cmask1, unsigned int cmask2);
 int  fa125SetChannelEnable(int id, int channel);
