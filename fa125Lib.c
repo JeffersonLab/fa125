@@ -1287,7 +1287,7 @@ fa125GetPedestalScaleFactor(int id)
  *  @param chan Channel Number
  *  @param lo Low timing threshold
  *  @param hi High timing threshold
- *  @return Pedestal Scale Factor if successful, otherwise ERROR.
+ *  @return OK if successful, otherwise ERROR.
  */
 int
 fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int hi)
@@ -1340,6 +1340,81 @@ fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int
   FA125UNLOCK;
 
   return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Set the Low and High timing threshold for all channels in the selected module.
+ *  @param id Slot number
+ *  @param lo Low timing threshold
+ *  @param hi High timing threshold
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi)
+{
+  int chan=0;
+  unsigned int wval = 0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  if(lo>0xff)
+    {
+      printf("%s: ERROR: Invalid value for Low Threshold (%d)\n",
+	     __FUNCTION__,lo);
+      return ERROR;
+    }
+
+  if(hi>0xff)
+    {
+      printf("%s: ERROR: Invalid value for High Threshold (%d)\n",
+	     __FUNCTION__,hi);
+      return ERROR;
+    }
+  
+  FA125LOCK;
+  for(chan=0; chan<72; chan++)
+    {
+      if(chan%2==0)
+	{
+	  wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF0000) |
+	    ((hi) | (lo<<8));
+	  vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
+		     wval);
+	}
+      else
+	{
+	  wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF) |
+	    ((hi<<16) | (lo<<24));
+	  vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
+		     wval);
+	}
+    }
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Set the Low and High timing threshold for all channels in all initialized modules.
+ *  @param lo Low timing threshold
+ *  @param hi High timing threshold
+ */
+void
+fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi)
+{
+  int id=0;
+
+  for(id=0; id<nfa125; id++)
+    {
+      fa125SetCommonTimingThreshold(fa125Slot(id), lo, hi);
+    }
 }
 
 /**
@@ -1677,12 +1752,12 @@ fa125ReadOffsetToFile(int id, char *filename)
  *  @ingroup Config
  *  @brief Set the readout threshold for a specific fADC125 Channel.
  *  @param id Slot number
- *  @param tvalue Threshold Value
  *  @param chan Channel Number
+ *  @param tvalue Threshold Value
  *  @return OK if successful, otherwise ERROR.
  */
 int
-fa125SetThreshold(int id, unsigned short tvalue, unsigned short chan)
+fa125SetThreshold(int id, unsigned short chan, unsigned short tvalue)
 {
   if(id==0) id=fa125ID[0];
 
