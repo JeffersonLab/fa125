@@ -32,13 +32,16 @@ ifeq ($(ARCH),VXWORKSPPC)
 
 VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
 
-DEFS   = -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall -fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
-ifdef DEBUG
-DEFS  += -Wall -g
-endif
-INCS   = -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
-CC     = ccppc $(INCS) $(DEFS)
-LD     = ldppc
+# This should be replaced with whichever directories contain jvme.h, tiLib.h, tsLib.h..
+VME_INCLUDE             ?= -I$(LINUXVME_INC)
+
+CC			= ccppc
+LD			= ldppc
+DEFS			= -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall \
+				-fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
+INCS			= -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net \
+			 $(VME_INCLUDE)
+CFLAGS			= $(INCS) $(DEFS)
 
 # explicit targets
 
@@ -48,7 +51,8 @@ clean:
 	rm -f fa125Lib.o
 
 fa125Lib.o: fa125Lib.c fa125Lib.h
-	$(CC) -c fa125Lib.c
+	@echo "Building $@ from $<"
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 endif
 
@@ -62,8 +66,9 @@ CROSS_COMPILE           =
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -I. -I${LINUXVME_INC} -I/usr/include \
-			  -L. -L${LINUXVME_LIB} 
+CFLAGS			= -L. -L${LINUXVME_LIB} 
+INCS			= -I. -I${LINUXVME_INC} 
+
 ifdef DEBUG
 CFLAGS			+= -Wall -g
 else
@@ -71,21 +76,23 @@ else
 endif
 
 OBJS			= fa125Lib.o
+DEPS			= fa125Lib.d
 
 LIBS			= libfa125.a
 
 all: $(LIBS)
 
-fa125Lib.o: fa125Lib.c fa125Lib.h Makefile
-	$(CC) -c $(CFLAGS) -o $@ fa125Lib.c
+fa125Lib.o: fa125Lib.c 
+	@echo "Building $@ from $<"
+	$(CC) -c $(CFLAGS) $(INCS) -o $@ fa125Lib.c
 
 libfa125.a: fa125Lib.o
-	$(CC) -fpic -shared $(CFLAGS) -o libfa125.so fa125Lib.c
+	$(CC) -fpic -shared $(CFLAGS) $(INCS) -o libfa125.so fa125Lib.c
 	$(AR) ruv libfa125.a fa125Lib.o
 	$(RANLIB) libfa125.a
 
 clean distclean:
-	@rm -f $(OBJS) $(LIBS) *.so *~
+	@rm -f $(OBJS) $(LIBS) $(DEPS) *.so *~
 
 links: libfa125.a
 	ln -sf $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
@@ -100,11 +107,14 @@ install: libfa125.a
 %: %.c libfa125.a
 	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -lfa125
 
-rol:
-	make -f Makefile-rol
+%.d: %.c
+	@echo "Building $@ from $<"
+	@set -e; rm -f $@; \
+	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
 
-rolclean:
-	make -f Makefile-rol clean
+-include $(DEPS)
 
 .PHONY: all clean distclean
 
