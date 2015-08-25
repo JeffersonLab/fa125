@@ -407,6 +407,8 @@ int  fa125GetIntegrationScaleFactor(int id);
 int  fa125GetAmplitudeScaleFactor(int id);
 int  fa125GetPedestalScaleFactor(int id);
 int  fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int hi);
+int  fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi);
+void fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi);
 int  fa125GetTimingThreshold(int id, unsigned int chan);
 int  fa125Slot(unsigned int i);
 int  fa125PowerOff(int id);
