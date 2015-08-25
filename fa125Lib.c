@@ -729,7 +729,7 @@ fa125Status(int id, int pflag)
   printf(" Trigger Source (0x%x):",p.trigsrc);
   trigsrc = p.trigsrc & FA125_TRIGSRC_TRIGGER_MASK;
   if(trigsrc == FA125_TRIGSRC_TRIGGER_P0)
-    printf(" P0\n");
+    printf(" P0 (VXS)\n");
   else if (trigsrc == FA125_TRIGSRC_TRIGGER_SOFTWARE)
     printf(" Software (VME)\n");
   else if (trigsrc == FA125_TRIGSRC_TRIGGER_INTERNAL_SUM)
@@ -741,7 +741,7 @@ fa125Status(int id, int pflag)
   printf(" SyncReset Source:");
   srsrc = (p.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2;
   if(srsrc == FA125_PROC_CTRL2_SYNCRESET_P0)
-    printf(" P0\n");
+    printf(" P0 (VXS)\n");
   else if (srsrc == FA125_PROC_CTRL2_SYNCRESET_VME)
     printf(" VME (software)\n");
 
@@ -765,28 +765,32 @@ fa125Status(int id, int pflag)
   printf("\n");
 
   printf(" Processing Configuration: \n");
-    printf("   Mode = %d  (%s)  - %s\n\n",
+    printf("  Mode = %d  (%s)  - %s\n\n",
 	   (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
 	   fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
 	   (f[0].config1 & FA125_FE_CONFIG1_ENABLE)?"ENABLED":"DISABLED");
-  printf("   Lookback               (PL) = %4d ns   Time Window           (NW) = %4d ns\n",
-	 8*f[0].pl, 8*f[0].nw);
-  printf("   Integration End        (IE) = %4d ns   Pedestal Gap          (PG) = %4d ns\n",
-	 8*(f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK),
-	 8*((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
-  printf("   Initial Pedestal Width (NP) = %4d ns   Local Pedestal Width (NP2) = %4d ns\n",
+  printf("  Lookback         (PL) = %4dns (%5d)  Time Window     (NW) = %4dns (%4d)\n",
+	 8*f[0].pl, f[0].pl, 8*f[0].nw, f[0].nw);
+  printf("  Integration End  (IE) = %4dns (%5d)  Pedestal Gap    (PG) = %4dns (%4d)\n",
+	 8*(f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK), 
+	 f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK,
+	 8*((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12), 
+	 (f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12);
+  printf("  Initial Pedestal (NP) = %4dns (%5d)  Local Pedestal (NP2) = %4dns (%4d)\n",
 	 8*(1<<(f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	 (1<<(f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	 (1<<((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)),
 	 8*(1<<((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)));
   printf("\n");
-  printf("   Scale Factors:\n");
+  printf("  Scale Factors:\n");
   printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n\n",
 	 8*((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
 	 8*((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
 	 8*((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
 	 
 
-  printf("   Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
-  printf("   Playback Mode    = %s \n",
+  printf("  Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
+  printf("  Playback Mode    = %s \n",
 	 (f[0].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE)?"ENABLED":"DISABLED");
 
   printf("\n");
@@ -925,15 +929,15 @@ fa125GStatus(int pflag)
 
       printf("%s     ",
 	     (p[id].ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
-	     == FA125_PROC_CTRL2_SYNCRESET_P0 ? " P0 " :
+	     == FA125_PROC_CTRL2_SYNCRESET_P0 ? " VXS " :
 	     (p[id].ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
-	     == FA125_PROC_CTRL2_SYNCRESET_VME? " VXS " :
+	     == FA125_PROC_CTRL2_SYNCRESET_VME? " VME " :
 	     " ??? ");
 
       printf("%s   ",
 	     (m[id].ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK) ? "YES":" NO");
 
-      printf(" P0");
+      printf(" VXS");
       printf("%s  ",
 	     m[id].ctrl1 & (FA125_CTRL1_FIRST_BOARD) ? "-F":
 	     m[id].ctrl1 & (FA125_CTRL1_LAST_BOARD) ? "-L":
@@ -948,36 +952,56 @@ fa125GStatus(int pflag)
 
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
-  printf("                                                     Scale\n");
-  printf("      Block         ........[nanoseconds]........    Factor\n");
-  printf("Slot  Level  Mode    PL   NW    IE  PG    NP  NP2    I  A  P    NPK   Playback \n");
+  printf("      Block\n");
+  printf("Slot  Level  Mode        PL              NW             IE          PG\n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
       id = fa125Slot(ifa);
       printf(" %2d    ",id);
 
-      printf("%3d     ",p[id].blocklevel & FA125_PROC_BLOCKLEVEL_MASK);
+      printf("%3d    ",p[id].blocklevel & FA125_PROC_BLOCKLEVEL_MASK);
 
-      printf("%d    ",(f[id].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1);
+      printf("%d   ",(f[id].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1);
 
-      printf("%4d ", 8*f[id].pl);
+      printf("%6dns (%5d)  ", 8*f[id].pl, f[id].pl);
 
-      printf("%4d  ", 8*f[id].nw);
+      printf("%4dns (%4d)  ", 8*f[id].nw, f[id].nw);
 
-      printf("%3d ", 8*(f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK));
+      printf("%4dns (%3d)  ", 8*(f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK),
+	     (f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK));
 
-      printf("%3d  ", 8*((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
+      printf("%2dns (%d)  ", 8*((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12),
+	     ((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
 
-      printf("%4d ", 8*(1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)) );
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n");
 
-      printf("%4d    ", 8*(1<<((f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)) );
+  printf("\n");
+  printf("                        fADC125 Processing Mode Config\n\n");
+  printf("       .......Pedestal Windows........        Scale   \n");
+  printf("          Initial           Local          ..Factors..            Playback\n");
+  printf("Slot   P1     NP1       P2     NP2         I    A    P      NPK     Mode \n");
+  printf("--------------------------------------------------------------------------------\n");
+  for(ifa=0; ifa<nfa125; ifa++)
+    {
+      id = fa125Slot(ifa);
+      printf(" %2d    ",id);
 
-      printf("%d  ", (f[id].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16);
+      printf("%d %4dns (%3d)   ", (f[id].ped_sf & FA125_FE_PED_SF_NP_MASK),
+	     8*(1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	     (1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)));
 
-      printf("%d  ", (f[id].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19);
+      printf("%d %4dns (%3d)     ", (f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8,
+	     8*(1<<((f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)),
+	     (1<<((f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)) );
 
-      printf("%d    ", (f[id].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22);
+      printf("%d    ", (f[id].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16);
+
+      printf("%d    ", (f[id].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19);
+
+      printf("%d      ", (f[id].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22);
 
       printf("%2d    ", (f[id].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
 
