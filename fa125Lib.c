@@ -640,7 +640,7 @@ fa125Status(int id, int pflag)
   printf("\nSTATUS for FA125 in slot %d at VME (Local) base address 0x%x (0x%lx)\n",
 	 id, (UINT32)((unsigned long)fa125p[id] - fa125A24Offset), (unsigned long) fa125p[id]);
 #endif
-  printf("---------------------------------------------------------------------- \n");
+  printf("--------------------------------------------------------------------------------\n");
   printf(" Main Firmware Revision     = 0x%08x\n",
 	 m.version);
   printf(" FrontEnd Firmware Revision = 0x%08x\n",
@@ -694,7 +694,7 @@ fa125Status(int id, int pflag)
       else
 	printf("   A32 Disabled\n");
     
-      printf("   Multiblock VME Address Range 0x%08x - 0x%08x\n",ambMin,ambMax);
+      printf("   Multiblock VME Address Range    0x%08x - 0x%08x\n",ambMin,ambMax);
     }
   else
     {
@@ -714,7 +714,7 @@ fa125Status(int id, int pflag)
     printf(" Power is OFF\n");
 
   /* CLOCK */
-  printf(" Clock Source (0x%x):",m.clock);
+  printf(" Clock Source (0x%02x)   :",m.clock);
   clksrc = m.clock & 0xffff;
   if(clksrc == FA125_CLOCK_P2)
     printf(" P2\n");
@@ -726,7 +726,7 @@ fa125Status(int id, int pflag)
     printf(" ????\n");
 
   /* TRIGGER */
-  printf(" Trigger Source (0x%x):",p.trigsrc);
+  printf(" Trigger Source (0x%02x) :",p.trigsrc);
   trigsrc = p.trigsrc & FA125_TRIGSRC_TRIGGER_MASK;
   if(trigsrc == FA125_TRIGSRC_TRIGGER_P0)
     printf(" P0 (VXS)\n");
@@ -738,7 +738,7 @@ fa125Status(int id, int pflag)
     printf(" P2\n");
 
   /* SYNCRESET */
-  printf(" SyncReset Source:");
+  printf(" SyncReset Source      :");
   srsrc = (p.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2;
   if(srsrc == FA125_PROC_CTRL2_SYNCRESET_P0)
     printf(" P0 (VXS)\n");
@@ -765,20 +765,28 @@ fa125Status(int id, int pflag)
   printf("\n");
 
   printf(" Processing Configuration: \n");
-    printf("  Mode = %d  (%s)  - %s\n\n",
-	   (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
-	   fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
-	   (f[0].config1 & FA125_FE_CONFIG1_ENABLE)?"ENABLED":"DISABLED");
-  printf("  Lookback         (PL) = %4dns (%5d)  Time Window     (NW) = %4dns (%4d)\n",
-	 8*f[0].pl, f[0].pl, 8*f[0].nw, f[0].nw);
-  printf("  Integration End  (IE) = %4dns (%5d)  Pedestal Gap    (PG) = %4dns (%4d)\n",
-	 8*(f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK), 
-	 f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK,
-	 8*((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12), 
-	 (f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12);
-  printf("  Initial Pedestal (NP) = %4dns (%5d)  Local Pedestal (NP2) = %4dns (%4d)\n",
-	 8*(1<<(f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+  printf("  Mode = %d  (%s)  - %s\n\n",
+	 (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
+	 fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
+	 (f[0].config1 & FA125_FE_CONFIG1_ENABLE)?"ENABLED":"DISABLED");
+  printf("  Lookback                         (PL) = %5d %5dns\n",
+	 f[0].pl, 8*f[0].pl);
+  printf("  Time Window                      (NW) = %5d %5dns\n",
+	 f[0].nw, 8*f[0].nw);
+  printf("  Integration End                  (IE) = %5d %5dns\n",
+	 (f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK), 
+	 8*(f[0].ie & FA125_FE_IE_INTEGRATION_END_MASK));
+  printf("  Pedestal Gap                     (PG) = %5d %5dns\n",
+	 ((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12), 
+	 8*((f[0].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
+  printf("  Initial Pedestal exponent        (P1) = %5d\n",
+	 (f[0].ped_sf & FA125_FE_PED_SF_NP_MASK));
+  printf("  Initial Pedestal window  (NP = 2**P1) = %5d %5dns\n",
 	 (1<<(f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	 8*(1<<(f[0].ped_sf & FA125_FE_PED_SF_NP_MASK)));
+  printf("  Local Pedestal exponent          (P2) = %5d\n",
+	 (f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8);
+  printf("  Local Pedestal window    (NP2= 2**P2) = %5d %5dns\n",
 	 (1<<((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)),
 	 8*(1<<((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)));
   printf("\n");
@@ -799,7 +807,7 @@ fa125Status(int id, int pflag)
   printf(" Trig  Count = %d\n",p.trig_count);
   printf(" Ev    Count = %d\n",p.ev_count);
 
-  printf("---------------------------------------------------------------------- \n");
+  printf("--------------------------------------------------------------------------------\n");
   return OK;
 
 }
@@ -934,11 +942,11 @@ fa125GStatus(int pflag)
 	     == FA125_PROC_CTRL2_SYNCRESET_VME? " VME " :
 	     " ??? ");
 
-      printf("%s   ",
+      printf("%s ",
 	     (m[id].ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK) ? "YES":" NO");
 
       printf(" VXS");
-      printf("%s  ",
+      printf("%s   ",
 	     m[id].ctrl1 & (FA125_CTRL1_FIRST_BOARD) ? "-F":
 	     m[id].ctrl1 & (FA125_CTRL1_LAST_BOARD) ? "-L":
 	     "  ");
@@ -953,7 +961,7 @@ fa125GStatus(int pflag)
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
   printf("      Block\n");
-  printf("Slot  Level  Mode        PL              NW             IE          PG\n");
+  printf("Slot  Level  Mode  ......PL......   ....NW.....   ....IE....   ...PG...\n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
@@ -962,17 +970,17 @@ fa125GStatus(int pflag)
 
       printf("%3d    ",p[id].blocklevel & FA125_PROC_BLOCKLEVEL_MASK);
 
-      printf("%d   ",(f[id].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1);
+      printf("%d    ",(f[id].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1);
 
-      printf("%6dns (%5d)  ", 8*f[id].pl, f[id].pl);
+      printf("%5d %6dns   ", f[id].pl, 8*f[id].pl);
 
-      printf("%4dns (%4d)  ", 8*f[id].nw, f[id].nw);
+      printf("%4d %4dns   ", f[id].nw, 8*f[id].nw);
 
-      printf("%4dns (%3d)  ", 8*(f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK),
-	     (f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK));
+      printf("%3d %4dns    ", (f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK),
+	     8*(f[id].ie & FA125_FE_IE_INTEGRATION_END_MASK));
 
-      printf("%2dns (%d)  ", 8*((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12),
-	     ((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
+      printf("%d  %2dns", ((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12),
+	     8*((f[id].ie & FA125_FE_IE_PEDESTAL_GAP_MASK)>>12));
 
       printf("\n");
     }
@@ -980,20 +988,20 @@ fa125GStatus(int pflag)
 
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
-  printf("       .......Pedestal Windows........        Scale   \n");
-  printf("          Initial           Local          ..Factors..            Playback\n");
-  printf("Slot   P1     NP1       P2     NP2         I    A    P      NPK     Mode \n");
+  printf("             Pedestal Windows               Scale   \n");
+  printf("       ---Initial---  ----Local----      ..Factors..            Playback\n");
+  printf("Slot   P1 ...NP1....  P2 ...NP2....      I    A    P      NPK     Mode \n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
       id = fa125Slot(ifa);
       printf(" %2d    ",id);
 
-      printf("%d %4dns (%3d)   ", (f[id].ped_sf & FA125_FE_PED_SF_NP_MASK),
-	     8*(1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)),
-	     (1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)));
+      printf("%d  %3d %4dns  ", (f[id].ped_sf & FA125_FE_PED_SF_NP_MASK),
+	     (1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)),
+	     8*(1<<(f[id].ped_sf & FA125_FE_PED_SF_NP_MASK)));
 
-      printf("%d %4dns (%3d)     ", (f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8,
+      printf("%d  %3d %4dns      ", (f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8,
 	     8*(1<<((f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)),
 	     (1<<((f[id].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)) );
 
