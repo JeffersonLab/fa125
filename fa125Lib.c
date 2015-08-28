@@ -16,6 +16,8 @@
  *             Gerard Visser
  *             gvisser@indiana.edu
  *             Indiana University
+ *
+ * __DATE__:
  *                                                                            *
  *----------------------------------------------------------------------------*
  *
@@ -1107,7 +1109,8 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
 		 unsigned int P1, unsigned int P2)
 {
   int imode=0, supported_modes[FA125_SUPPORTED_NMODES] = FA125_SUPPORTED_MODES;
-  int mode_supported=0;
+  int cdc_modes[FA125_CDC_NMODES] = FA125_CDC_MODES;
+  int mode_supported=0, cdc_mode=0;
   
   if(id==0) id=fa125ID[0];
   
@@ -1116,11 +1119,15 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
       printf("%s: ERROR : FA125 in slot %d is not initialized \n",__FUNCTION__,id);
       return ERROR;
     }
-
+  
+  /* Check if mode is supported */
   for(imode=0; imode<FA125_SUPPORTED_NMODES; imode++)
     {
       if(pmode == supported_modes[imode])
-	mode_supported=1;
+	{
+	  mode_supported=1;
+	  break;
+	}
     }
   if(!mode_supported)
     {
@@ -1129,37 +1136,54 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
       return ERROR;
     }
 
+  /* Check if mode is a CDC mode */
+  for(imode=0; imode<FA125_CDC_NMODES; imode++)
+    {
+      if(pmode == cdc_modes[imode])
+	{
+	  cdc_mode=1;
+	  break;
+	}
+    }
+
   /* Defaults */
   if((PL==0) || (PL>FA125_MAX_PL))
     {
-      PL  = FA125_DEFAULT_PL;
       printf("%s: WARN: Invalid PL (%d). Setting default (%d)\n",
 	     __FUNCTION__,PL,FA125_DEFAULT_PL);
+      PL  = FA125_DEFAULT_PL;
     }
   if((NW==0) || (NW>FA125_MAX_NW)) 
     {
-      NW = FA125_DEFAULT_NW;
       printf("%s: WARN: Invalid NW (%d). Setting default (%d)\n",
 	     __FUNCTION__,NW,FA125_DEFAULT_NW);
+      NW = FA125_DEFAULT_NW;
     }
   if((IE==0) || (IE>FA125_MAX_IE))
     {
-      IE = FA125_DEFAULT_IE;
       printf("%s: WARN: Invalid IE (%d). Setting default (%d)\n",
 	     __FUNCTION__,IE,FA125_DEFAULT_IE);
+      IE = FA125_DEFAULT_IE;
     }
   if((PG==0) || (PG>FA125_MAX_PG))
     {
-      PG = FA125_DEFAULT_PG;
       printf("%s: WARN: Invalid PG (%d). Setting default (%d)\n",
 	     __FUNCTION__,PG,FA125_DEFAULT_PG);
+      PG = FA125_DEFAULT_PG;
     }
   if((NPK==0) || (NPK>FA125_MAX_NPK))
     {
-      NPK = FA125_DEFAULT_NPK;
       printf("%s: WARN: Invalid NPK (%d). Setting default (%d)\n",
 	     __FUNCTION__,NPK,FA125_DEFAULT_NPK);
+      NPK = FA125_DEFAULT_NPK;
     }
+  if(cdc_mode && (NPK!=1))
+    {
+      printf("%s: WARN: Invalid NPK (%d) for CDC mode. Setting to 1\n",
+	     __FUNCTION__,NPK);
+      NPK=1;
+    }
+
 
   /* Consistancy check */
   if(NW > PL) 
