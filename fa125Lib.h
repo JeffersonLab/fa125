@@ -13,7 +13,9 @@
  *             Gerard Visser
  *             gvisser@indiana.edu
  *             Indiana University
- *                                                                            *
+ *                                                                            
+ * __DATE__:
+ *
  *----------------------------------------------------------------------------*
  *
  * Description:
