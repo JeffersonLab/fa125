@@ -14,7 +14,7 @@
 # 	
 #  Author:  Bryan Moffit, TJANF Data Acquisition Group
 # 
-#  SVN: $Rev$
+#  __DATE__
 #
 DEBUG=1
 

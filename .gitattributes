@@ -1,0 +1,2 @@
+*.{c,h} filter=dater
+Makefile filter=dater
