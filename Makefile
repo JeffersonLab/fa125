@@ -14,7 +14,7 @@
 # 	
 #  Author:  Bryan Moffit, TJANF Data Acquisition Group
 # 
-#  __DATE__
+#  __DATE__:
 #
 DEBUG=1
 
