@@ -795,10 +795,14 @@ fa125Status(int id, int pflag)
 	 8*(1<<((f[0].ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8)));
   printf("\n");
   printf("  Scale Factors:\n");
-  printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n\n",
-	 8*((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
-	 8*((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
-	 8*((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+  printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n",
+	 ((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
+	 ((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
+	 ((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+  printf("             (2**IBIT) = %-3d        (2**ABIT) = %-3d       (2**PBIT) = %-d\n\n",
+	 1<<((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
+	 1<<((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
+	 1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
 	 
 
   printf("  Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
@@ -1113,6 +1117,7 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
   int imode=0, supported_modes[FA125_SUPPORTED_NMODES] = FA125_SUPPORTED_MODES;
   int cdc_modes[FA125_CDC_NMODES] = FA125_CDC_MODES;
   int mode_supported=0, cdc_mode=0;
+  int NE=20;
   
   if(id==0) id=fa125ID[0];
   
@@ -1194,9 +1199,10 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
       return ERROR;
     }
 
-  if(NW <= ((2^P1) + 6))
+  if(NW <= ((2^P1) + NE))
     {
-      printf("\n%s: ERROR: Window must be > Initial Pedestal Window + 6\n\n",__FUNCTION__); 
+      printf("\n%s: ERROR: Window must be > Initial Pedestal Window + NE (%d)\n\n",__FUNCTION__
+	     ,NE); 
       return ERROR;
     }
 
@@ -3386,7 +3392,7 @@ fa125DecodeData(unsigned int data)
   static unsigned int slot_id_fill = 0;
 
   static int nsamples=0;
-  static int goto_raw=0;
+/*   static int goto_raw=0; */
 
   int i_print =1;
   
