@@ -1094,7 +1094,7 @@ fa125GStatus(int pflag)
  *  @param  P1  Parameter for initial pedestal window (NP = 2^P1)
  *  @param  P2  Parameter for local pedestal window (NP2 = 2^P2)
  *
- *     (1) NW > NP + 6
+ *     (1) NW > NP + NE
  *     (2) NW > NU
  *     (3) NU > 14
  *     (4) NE >= NU-PG-PED
@@ -1255,10 +1255,24 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int 
       return ERROR;
     }
   
-  if((IBIT>7) || (ABIT>7) || (PBIT>7))
+  if(IBIT>FA125_MAX_IBIT)
     {
-      printf("\n%s: ERROR: Invalid scale factor(s). All must be <= 7\n\n",
-	     __FUNCTION__);
+      printf("\n%s: ERROR: Invalid IBIT scale factor. Must be <= %d\n\n",
+	     __FUNCTION__,FA125_MAX_IBIT);
+      return ERROR;
+    }
+
+  if(ABIT>FA125_MAX_ABIT)
+    {
+      printf("\n%s: ERROR: Invalid ABIT scale factor. Must be <= %d\n\n",
+	     __FUNCTION__,FA125_MAX_ABIT);
+      return ERROR;
+    }
+
+  if(PBIT>FA125_MAX_PBIT)
+    {
+      printf("\n%s: ERROR: Invalid PBIT scale factor. Must be <= %d\n\n",
+	     __FUNCTION__,FA125_MAX_PBIT);
       return ERROR;
     }
 
@@ -1376,16 +1390,16 @@ fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int
       return ERROR;
     }
 
-  if(lo>0xff)
+  if(lo>FA125_MAX_LOW_TTH)
     {
-      printf("\n%s: ERROR: Invalid value for Low Threshold (%d)\n\n",
+      printf("\n%s: ERROR: Invalid value for Low Timing Threshold (%d)\n\n",
 	     __FUNCTION__,lo);
       return ERROR;
     }
 
-  if(hi>0xff)
+  if(hi>FA125_MAX_HIGH_TTH)
     {
-      printf("\n%s: ERROR: Invalid value for High Threshold (%d)\n\n",
+      printf("\n%s: ERROR: Invalid value for High Timing Threshold (%d)\n\n",
 	     __FUNCTION__,hi);
       return ERROR;
     }
@@ -1431,16 +1445,16 @@ fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi)
       return ERROR;
     }
 
-  if(lo>0xff)
+  if(lo>FA125_MAX_LOW_TTH)
     {
-      printf("\n%s: ERROR: Invalid value for Low Threshold (%d)\n\n",
+      printf("\n%s: ERROR: Invalid value for Low Timing Threshold (%d)\n\n",
 	     __FUNCTION__,lo);
       return ERROR;
     }
 
-  if(hi>0xff)
+  if(hi>FA125_MAX_HIGH_TTH)
     {
-      printf("\n%s: ERROR: Invalid value for High Threshold (%d)\n\n",
+      printf("\n%s: ERROR: Invalid value for High Timing Threshold (%d)\n\n",
 	     __FUNCTION__,hi);
       return ERROR;
     }
@@ -1836,10 +1850,10 @@ fa125SetThreshold(int id, unsigned short chan, unsigned short tvalue)
       return(ERROR);
     }
 
-  if(tvalue>FA125_FE_THRESHOLD_MASK)
+  if(tvalue>FA125_MAX_HIGH_HTH)
     {
       logMsg("\nfa125SetThreshold: ERROR: Invalid threshold (%d). Must be <= %d \n\n",
-	     tvalue,FA125_FE_THRESHOLD_MASK,3,4,5,6);
+	     tvalue,FA125_MAX_HIGH_HTH,3,4,5,6);
       return ERROR;
     }
   
