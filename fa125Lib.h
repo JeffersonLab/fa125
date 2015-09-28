@@ -385,14 +385,16 @@ typedef enum
 #define FA125_PROC_MODE_FDC_PEAKAMP        5
 #define FA125_PROC_MODE_CDC_PULSESAMPLES   6
 #define FA125_PROC_MODE_FDC_PULSESAMPLES   7
+#define FA125_PROC_MODE_FDC_AMPSAMPLES     8
 #define FA125_SUPPORTED_MODES						\
   {   FA125_PROC_MODE_CDC_INTEGRAL,					\
       FA125_PROC_MODE_FDC_INTEGRAL,					\
       FA125_PROC_MODE_FDC_PEAKAMP,					\
       FA125_PROC_MODE_CDC_PULSESAMPLES,					\
-      FA125_PROC_MODE_FDC_PULSESAMPLES}
-#define FA125_SUPPORTED_NMODES 5
-#define FA125_MAXIMUM_NMODES   10
+      FA125_PROC_MODE_FDC_PULSESAMPLES,					\
+      FA125_PROC_MODE_FDC_AMPSAMPLES}
+#define FA125_SUPPORTED_NMODES 6
+#define FA125_MAXIMUM_NMODES   9
 
 #define FA125_CDC_MODES				\
   {   FA125_PROC_MODE_CDC_INTEGRAL,		\
@@ -406,6 +408,7 @@ typedef enum
 #define FA125_FDC_NMODES 3
 
 extern const char *fa125_mode_names[FA125_MAXIMUM_NMODES];
+extern const char *fa125_modes[FA125_MAXIMUM_NMODES];
 
 /* fadcBlockError values */
 typedef enum
@@ -423,7 +426,7 @@ extern const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES];
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id, int pflag);
 void fa125GStatus(int pflag);
-int  fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW, 
+int  fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW, 
 		      unsigned int IE, unsigned int PG, unsigned int NPK,
 		      unsigned int P1, unsigned int P2);
 int  fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int PBIT);

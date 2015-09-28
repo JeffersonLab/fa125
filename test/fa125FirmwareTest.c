@@ -229,7 +229,7 @@ main(int argc, char *argv[])
 
       fa125Reset(faslot, 0);
 
-      rval = fa125SetProcMode(faslot,3,100,100,40,4,1,4,4);
+      rval = fa125SetProcMode(faslot,"CDC_long",100,100,40,4,1,4,4);
 
       if(rval==ERROR)
         {

@@ -769,9 +769,9 @@ fa125Status(int id, int pflag)
   printf("\n");
 
   printf(" Processing Configuration: \n");
-  printf("  Mode = %d  (%s)  - %s\n\n",
+  printf("  Mode = %s  (%d)  - %s\n\n",
+	 fa125_mode_names[(f[0].config1&FA125_FE_CONFIG1_MODE_MASK) + 1],
 	 (f[0].config1&FA125_FE_CONFIG1_MODE_MASK)+1,
-	 fa125_mode_names[f[0].config1&FA125_FE_CONFIG1_MODE_MASK],
 	 (f[0].config1 & FA125_FE_CONFIG1_ENABLE)?"ENABLED":"DISABLED");
   printf("  Lookback                         (PL) = %5d %5dns\n",
 	 f[0].pl, 8*f[0].pl);
@@ -969,16 +969,16 @@ fa125GStatus(int pflag)
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
   printf("      Block\n");
-  printf("Slot  Level  Mode  ......PL......   ....NW.....   ....IE....   ...PG...\n");
+  printf("Slot  Level  Mode         ......PL......   ....NW.....   ....IE....   ...PG...\n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
       id = fa125Slot(ifa);
       printf(" %2d    ",id);
 
-      printf("%3d    ",p[id].blocklevel & FA125_PROC_BLOCKLEVEL_MASK);
+      printf("%3d   ",p[id].blocklevel & FA125_PROC_BLOCKLEVEL_MASK);
 
-      printf("%d    ",(f[id].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1);
+      printf("%-12s ",fa125_modes[(f[id].config1 & FA125_FE_CONFIG1_MODE_MASK) + 1]);
 
       printf("%5d %6dns   ", f[id].pl, 8*f[id].pl);
 
@@ -1075,17 +1075,35 @@ fa125GStatus(int pflag)
 
 }
 
+static int
+fa125GetModeNumber(char *mode)
+{
+  int imode=0;
+
+  for(imode=0; imode<FA125_MAXIMUM_NMODES; imode++)
+    {
+      if(strlen(fa125_modes[imode])==0) continue;
+
+      if(strcasecmp(mode,fa125_modes[imode])==0)
+	{
+	  return imode;
+	}
+    }
+
+  return ERROR;
+}
+
 /**
  *  @ingroup Config
  *  @brief Configure the processing type/mode
  *
  *  @param id Slot number
  *  @param pmode  Processing Mode
- *     -     3 - Pulse Integral and Time (CDC Format)
- *     -     4 - Pulse Integral and Time (FDC Format)
- *     -     5 - Peak Amplitude and Time (FDC Format)
- *     -     6 - Pulse Samples (CDC Format)
- *     -     7 - Pulse Samples (FDC Format)
+ *     -     3 - Pulse Integral and Time (CDC)
+ *     -     4 - Pulse Integral and Time (FDC)
+ *     -     5 - Peak Amplitude and Time (FDC_amp)
+ *     -     6 - Pulse Samples (CDC_long)
+ *     -     7 - Pulse Samples (FDC_long)
  *  @param  PL  Window Latency
  *  @param  NW  Window Width
  *  @param  IE  Integration End
@@ -1110,11 +1128,11 @@ fa125GStatus(int pflag)
  *  @return OK if successful, otherwise ERROR.
  */
 int
-fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW, 
+fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW, 
 		 unsigned int IE, unsigned int PG, unsigned int NPK,
 		 unsigned int P1, unsigned int P2)
 {
-  int imode=0, supported_modes[FA125_SUPPORTED_NMODES] = FA125_SUPPORTED_MODES;
+  int imode=0, pmode=0, supported_modes[FA125_SUPPORTED_NMODES] = FA125_SUPPORTED_MODES;
   int cdc_modes[FA125_CDC_NMODES] = FA125_CDC_MODES;
   int mode_supported=0, cdc_mode=0;
   int NE=20;
@@ -1126,6 +1144,8 @@ fa125SetProcMode(int id, int pmode, unsigned int PL, unsigned int NW,
       printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id);
       return ERROR;
     }
+
+  pmode = fa125GetModeNumber(mode);
   
   /* Check if mode is supported */
   for(imode=0; imode<FA125_SUPPORTED_NMODES; imode++)
@@ -3354,6 +3374,7 @@ struct data_struct
   unsigned int time_2;
   unsigned int chan;
   unsigned int width;
+  unsigned int npk;
   unsigned int le_time;
   unsigned int time_quality;
   unsigned int overflow_cnt;
@@ -3406,6 +3427,7 @@ fa125DecodeData(unsigned int data)
   static unsigned int slot_id_fill = 0;
 
   static int nsamples=0;
+  static int ipk=0;
 /*   static int goto_raw=0; */
 
   int i_print =1;
@@ -3449,7 +3471,7 @@ fa125DecodeData(unsigned int data)
 	  fadc_data.slot_id_hd = (data & 0x7C00000) >> 22;
 	  fadc_data.mod_id_hd =  (data &  0x3C0000) >> 18;
 	  fadc_data.n_evts =  (data & 0x000FF);
-	  fadc_data.blk_num = (data & 0x3FF00) >> 8;
+	  fadc_data.blk_num = (data & 0x7F00) >> 8;
 	  if( i_print ) 
 	    printf("%8X - BLOCK HEADER - slot = %d  id = %d  n_evts = %d  n_blk = %d\n",
 		   data, fadc_data.slot_id_hd, fadc_data.mod_id_hd, fadc_data.n_evts, fadc_data.blk_num);
@@ -3532,6 +3554,7 @@ fa125DecodeData(unsigned int data)
 	  if( fadc_data.new_type )
 	    {
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
+	      fadc_data.npk  = (data & 0xF8000)>>15;
 	      fadc_data.le_time = (data & 0x7FF0)>>4;
 	      fadc_data.time_quality = (data & (1<<3))>>3;
 	      fadc_data.overflow_cnt = (data & 0x7);
@@ -3555,22 +3578,25 @@ fa125DecodeData(unsigned int data)
 	  if( fadc_data.new_type )
 	    {
 	      fadc_data.chan = (data & 0x7F00000) >> 20;
+	      fadc_data.npk  = (data & 0xF8000)>>15;
 	      fadc_data.le_time = (data & 0x7FF0)>>4;
 	      fadc_data.time_quality = (data & (1<<3))>>3;
 	      fadc_data.overflow_cnt = (data & 0x7);
+	      ipk = 0;
 	      if( i_print ) 
-		printf("%8X - PULSE DATA (FDC IT) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
-		       data, fadc_data.chan, fadc_data.le_time,
+		printf("%8X - PULSE DATA (FDC IT) - chan = %2d  NPK = %d  LE time = %d  Q = %d  OVF = %d\n", 
+		       data, fadc_data.chan, fadc_data.npk, fadc_data.le_time,
 		       fadc_data.time_quality, fadc_data.overflow_cnt);
 	    }    
 	  else
 	    {
+	      ipk++;
 	      fadc_data.pedestal = (data & 0x7F800000)>>23;
 	      fadc_data.integral = (data & 0x007FFE00)>>9;
 	      fadc_data.fm_amplitude = (data & 0x000001FF);
 	      if( i_print ) 
-		printf("%8X - PULSE DATA (FDC IT) - ped = %d  integral = %d  firstmax ampl = %d\n", 
-		       data, fadc_data.pedestal, fadc_data.integral, fadc_data.fm_amplitude);
+		printf("%8X - PULSE DATA (FDC IT) %d - ped = %d  integral = %d  firstmax ampl = %d\n", 
+		       data, ipk, fadc_data.pedestal, fadc_data.integral, fadc_data.fm_amplitude);
 	    }    
 	  break;
 
@@ -3581,19 +3607,21 @@ fa125DecodeData(unsigned int data)
 	      fadc_data.le_time = (data & 0x7FF0)>>4;
 	      fadc_data.time_quality = (data & (1<<3))>>3;
 	      fadc_data.overflow_cnt = (data & 0x7);
+	      ipk = 0;
 	      if( i_print ) 
-		printf("%8X - PULSE DATA (FDC AT) - chan = %2d  LE time = %d  Q = %d  OVF = %d\n", 
-		       data, fadc_data.chan, fadc_data.le_time,
+		printf("%8X - PULSE DATA (FDC AT) - chan = %2d  NPK = %d  LE time = %d  Q = %d  OVF = %d\n", 
+		       data, fadc_data.chan, fadc_data.npk, fadc_data.le_time,
 		       fadc_data.time_quality, fadc_data.overflow_cnt);
 	    }    
 	  else
 	    {
+	      ipk++;
 	      fadc_data.peak_amplitude = (data & 0x7ff80000)>>19;
 	      fadc_data.peak_time = (data & 0x0007f800)>>11;
 	      fadc_data.pedestal = (data & 0x000007ff);
 	      if( i_print ) 
-		printf("%8X - PULSE DATA (FDC AT) - Ampl = %d  Time = %d  Pedestal = %d\n", 
-		       data, fadc_data.peak_amplitude, fadc_data.peak_time, fadc_data.pedestal);
+		printf("%8X - PULSE DATA (FDC AT) %d - Ampl = %d  Time = %d  Pedestal = %d\n", 
+		       data, ipk, fadc_data.peak_amplitude, fadc_data.peak_time, fadc_data.pedestal);
 	    }    
 	  break;
 
@@ -5222,12 +5250,24 @@ const char *fa125_mode_names[FA125_MAXIMUM_NMODES] =
   {
     "", // 0 
     "", // 1
-    "Integral and Time (CDC)",       // 2
-    "Integral and Time (FDC)",       // 3
-    "Peak Amplitude and Time (FDC)", // 4
-    "Pulse Samples (CDC)",           // 5
-    "Pulse Samples(FDC)",            // 6
-    "", // 7
-    "", // 8
-    ""  // 9
+    "", // 2
+    "Integral and Time (CDC)",       // 3
+    "Integral and Time (FDC)",       // 4
+    "Peak Amplitude and Time (FDC_amp)", // 5
+    "Pulse Samples (CDC_long)",           // 6
+    "Pulse Samples (FDC_long)",            // 7
+    "Peak Amplitude and Samples (FDC_amp_long)", // 8
+  };
+
+const char *fa125_modes[FA125_MAXIMUM_NMODES] =
+  {
+    "", // 0 
+    "", // 1
+    "", // 2
+    "CDC",      // 3
+    "FDC",      // 4
+    "FDC_amp",  // 5
+    "CDC_long", // 6
+    "FDC_long", // 7
+    "FDC_amp_long", // 8
   };
