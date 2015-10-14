@@ -232,7 +232,7 @@ struct fa125_a32
 #define FA125_FE_IE_PEDESTAL_GAP_MASK     0x000FF000
 
 /* 0xN0B4 FE timing_thres_hi definitions */
-#define FA125_FE_TIMING_THRES_HI_MASK(x) (0xFF<<((x%3)*9))
+#define FA125_FE_TIMING_THRES_HI_MASK(x) (0x1FF<<((x%3)*9))
 
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
@@ -445,6 +445,7 @@ int  fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigne
 int  fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi);
 void fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi);
 int  fa125GetTimingThreshold(int id, unsigned int chan);
+int  fa125PrintTimingThresholds(int id);
 int  fa125Slot(unsigned int i);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);

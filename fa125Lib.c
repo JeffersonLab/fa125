@@ -1444,23 +1444,23 @@ fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int
   /* Write the hi value */
   if((chan%3)==0)
     {
-      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 0x07fffe00) |
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2]) & 0x07fffe00) |
 	(hi);
-      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3],
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2],
 		 wval);
     }
   else if((chan%3)==1)
     {
-      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 0x07fc01ff) |
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2]) & 0x07fc01ff) |
 	(hi<<9);
-      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3],
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2],
 		 wval);
     }
   else
     {
-      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 0x0003ffff) |
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2]) & 0x0003ffff) |
 	(hi<<18);
-      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3],
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2],
 		 wval);
     }
   FA125UNLOCK;
@@ -1569,17 +1569,17 @@ fa125GetTimingThreshold(int id, unsigned int chan)
 
   if((chan%3)==0)
     {
-      hi = vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 
+      hi = vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2]) & 
 	FA125_FE_TIMING_THRES_HI_MASK(chan);
     }
   else if((chan%3)==1)
     {
-      hi = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 
+      hi = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2]) & 
 	    FA125_FE_TIMING_THRES_HI_MASK(chan))>>9;
     }
   else
     {
-      hi = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 
+      hi = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%2]) & 
 	    FA125_FE_TIMING_THRES_HI_MASK(chan))>>18;
     }
   FA125UNLOCK;
@@ -1589,6 +1589,41 @@ fa125GetTimingThreshold(int id, unsigned int chan)
   return (int)rval;
 }
 
+int
+fa125PrintTimingThresholds(int id)
+{
+  int ichan, rval, i, lo[FA125_MAX_ADC_CHANNELS], hi[FA125_MAX_ADC_CHANNELS];
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  for(ichan=0; ichan<FA125_MAX_ADC_CHANNELS; ichan++)
+    {
+      rval = fa125GetTimingThreshold(id, ichan);
+      lo[ichan] = rval>>8;
+      hi[ichan] = rval&0x1FF;
+    }
+
+  printf("%s:\n\n",__FUNCTION__);
+  printf("Ch     lo   hi      lo   hi      lo   hi      lo   hi      lo   hi      lo   hi\n");
+  printf("--------------------------------------------------------------------------------\n");
+  for(ichan=0; ichan<FA125_MAX_ADC_CHANNELS; ichan+=6)
+    {
+      printf("%2d:   ",ichan);
+      for(i=ichan; i<6+ichan; i++)
+	{
+	  printf("%3d  %3d     ",lo[i],hi[i]);
+	}
+      printf("\n");
+    }
+  printf("--------------------------------------------------------------------------------\n\n");
+
+  return OK;
+}
 
 
 /**
