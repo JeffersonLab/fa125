@@ -74,9 +74,10 @@ struct fa125_a24_fe
   /* 0xN098 */          UINT32 blank2;
   /* 0xN09C */ volatile UINT32 ppg_trig_delay;
   /* 0xN0A0 */ volatile UINT32 ped_sf;
-  /* 0xN0A4 */ volatile UINT32 timing_thres[3];
+  /* 0xN0A4 */ volatile UINT32 timing_thres_lo[3];
   /* 0xN0B0 */ volatile UINT32 ie;
-  /* 0xN0B4 */          UINT32 blank3[(0x1000-0xB4)/4];
+  /* 0xN0B4 */ volatile UINT32 timing_thres_hi[2];
+  /* 0xN0BC */          UINT32 blank3[(0x1000-0xBC)/4];
 };
 
 struct fa125_a24_proc 
@@ -94,6 +95,8 @@ struct fa125_a24_proc
   /* 0xD028 */ volatile UINT32 trig2_count;
   /* 0xD02C */ volatile UINT32 pulser_control;
   /* 0xD030 */ volatile UINT32 pulser_trig_delay;
+  /* 0xD034 */          UINT32 blank0;
+  /* 0xD038 */ volatile UINT32 ntrig_busy;
 };
 
 struct fa125_a24 
@@ -111,9 +114,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020003
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020003
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00020003
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020005
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020005
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00020005
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -221,13 +224,15 @@ struct fa125_a32
 #define FA125_FE_PED_SF_ABIT_MASK     0x00380000
 #define FA125_FE_PED_SF_PBIT_MASK     0x01C00000
 
-/* 0xN0A4 FE timing_thres definitions */
-#define FA125_FE_TIMING_THRES_HI_MASK(x) (0xFF<<((x%2)*16))
+/* 0xN0A4 FE timing_thres_lo definitions */
 #define FA125_FE_TIMING_THRES_LO_MASK(x) (0xFF<<(8+((x%2)*16)))
 
 /* 0xN0B0 FE integration_end definitions */
 #define FA125_FE_IE_INTEGRATION_END_MASK  0x00000FFF
 #define FA125_FE_IE_PEDESTAL_GAP_MASK     0x000FF000
+
+/* 0xN0B4 FE timing_thres_hi definitions */
+#define FA125_FE_TIMING_THRES_HI_MASK(x) (0xFF<<((x%3)*9))
 
 /* 0xD004 proc CSR register definitions */
 #define FA125_PROC_CSR_BUSY               (1<<0)
@@ -276,6 +281,9 @@ struct fa125_a32
 /* 0xD030 pulser_trig_delay register definitions */
 #define FA125_PROC_PULSER_TRIG_DELAY_MASK   0x00000FFF
 #define FA125_PROC_PULSER_WIDTH_MASK        0x00FFF000
+
+/* 0xD038 ntrig_busy register definitions */
+#define FA125_NTRIG_BUSY_MASK   0x000000FF
 
 /* Define data types and masks */
 #define FA125_DATA_FORMAT0     (0<<13)
@@ -468,6 +476,9 @@ int  fa125ResetCounters(int id);
 int  fa125ResetToken(int id);
 int  fa125GetTokenMask();
 int  fa125SetBlocklevel(int id, int blocklevel);
+int  fa125SetNTrigBusy(int id, int ntrig);
+int  fa125GSetNTrigBusy(int ntrig);
+int  fa125GetNTrigBusy(int id);
 int  fa125SoftTrigger(int id);
 int  fa125SetPulserTriggerDelay(int id, int delay);
 int  fa125SetPulserWidth(int id, int width);

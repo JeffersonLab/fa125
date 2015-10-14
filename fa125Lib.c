@@ -621,8 +621,8 @@ fa125Status(int id, int pflag)
   m.blockCSR     = vmeRead32(&fa125p[id]->main.blockCSR);
 
   f[0].config1   = vmeRead32(&fa125p[id]->fe[0].config1);
-  f[0].nw        = vmeRead32(&fa125p[id]->fe[0].nw);
-  f[0].pl        = vmeRead32(&fa125p[id]->fe[0].pl);
+  f[0].nw        = vmeRead32(&fa125p[id]->fe[0].nw) & FA125_FE_NW_MASK;
+  f[0].pl        = vmeRead32(&fa125p[id]->fe[0].pl) & FA125_FE_PL_MASK;
   f[0].ie        = vmeRead32(&fa125p[id]->fe[0].ie);
   f[0].ped_sf    = vmeRead32(&fa125p[id]->fe[0].ped_sf);
 
@@ -862,8 +862,8 @@ fa125GStatus(int pflag)
 
       f[id].version = vmeRead32(&fa125p[id]->fe[0].version);
       f[id].config1 = vmeRead32(&fa125p[id]->fe[0].config1);
-      f[id].pl      = vmeRead32(&fa125p[id]->fe[0].pl);
-      f[id].nw      = vmeRead32(&fa125p[id]->fe[0].nw);
+      f[id].pl      = vmeRead32(&fa125p[id]->fe[0].pl) & FA125_FE_PL_MASK;
+      f[id].nw      = vmeRead32(&fa125p[id]->fe[0].nw) & FA125_FE_NW_MASK;
       f[id].ie      = vmeRead32(&fa125p[id]->fe[0].ie);
       f[id].ped_sf  = vmeRead32(&fa125p[id]->fe[0].ped_sf);
     }
@@ -1425,18 +1425,42 @@ fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int
     }
   
   FA125LOCK;
-  if(chan%2==0)
+  /* Write the lo value */
+  if((chan%2)==0)
     {
-      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF0000) |
-	((hi) | (lo<<8));
-      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_lo[(chan/2)%3]) & 0xFFFF0000) |
+	(lo<<8);
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_lo[(chan/2)%3],
 		 wval);
     }
   else
     {
-      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF) |
-	((hi<<16) | (lo<<24));
-      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_lo[(chan/2)%3]) & 0xFFFF) |
+	(lo<<24);
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_lo[(chan/2)%3],
+		 wval);
+    }
+
+  /* Write the hi value */
+  if((chan%3)==0)
+    {
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 0x07fffe00) |
+	(hi);
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3],
+		 wval);
+    }
+  else if((chan%3)==1)
+    {
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 0x07fc01ff) |
+	(hi<<9);
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3],
+		 wval);
+    }
+  else
+    {
+      wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 0x0003ffff) |
+	(hi<<18);
+      vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3],
 		 wval);
     }
   FA125UNLOCK;
@@ -1456,7 +1480,6 @@ int
 fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi)
 {
   int chan=0;
-  unsigned int wval = 0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1479,25 +1502,10 @@ fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi)
       return ERROR;
     }
   
-  FA125LOCK;
   for(chan=0;chan<FA125_MAX_ADC_CHANNELS;chan++)
     {
-      if(chan%2==0)
-	{
-	  wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF0000) |
-	    ((hi) | (lo<<8));
-	  vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
-		     wval);
-	}
-      else
-	{
-	  wval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF) |
-	    ((hi<<16) | (lo<<24));
-	  vmeWrite32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3],
-		     wval);
-	}
+      fa125SetTimingThreshold(id, chan, lo, hi);
     }
-  FA125UNLOCK;
 
   return OK;
 }
@@ -1530,7 +1538,8 @@ fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi)
 int
 fa125GetTimingThreshold(int id, unsigned int chan)
 {
-  unsigned int rval=0;
+  unsigned int rval=0, hi=0, lo=0;
+  
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1547,15 +1556,35 @@ fa125GetTimingThreshold(int id, unsigned int chan)
     }
 
   FA125LOCK;
-  if(chan%2==0)
+  if((chan%2)==0)
     {
-      rval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF);
+      lo = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_lo[(chan/2)%3]) & 
+	FA125_FE_TIMING_THRES_LO_MASK(chan))>>8;
     }
   else
     {
-      rval = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres[(chan/2)%3]) & 0xFFFF0000)>>16;
+      lo = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_lo[(chan/2)%3]) & 
+	    FA125_FE_TIMING_THRES_LO_MASK(chan))>>24;
+    }
+
+  if((chan%3)==0)
+    {
+      hi = vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 
+	FA125_FE_TIMING_THRES_HI_MASK(chan);
+    }
+  else if((chan%3)==1)
+    {
+      hi = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 
+	    FA125_FE_TIMING_THRES_HI_MASK(chan))>>9;
+    }
+  else
+    {
+      hi = (vmeRead32(&fa125p[id]->fe[chan/6].timing_thres_hi[(chan/3)%3]) & 
+	    FA125_FE_TIMING_THRES_HI_MASK(chan))>>18;
     }
   FA125UNLOCK;
+
+  rval = (lo<<8) | hi;
 
   return (int)rval;
 }
@@ -2727,6 +2756,94 @@ fa125SetBlocklevel(int id, int blocklevel)
 
   return OK;
 }
+
+/**
+ *  @ingroup Config
+ *  @brief Set the number of un-processed triggers in the trigger buffer before
+ *     the module goes BUSY
+ *  @param id Slot number
+ *  @param ntrig Number of Triggers
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SetNTrigBusy(int id, int ntrig)
+{
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",
+	     __FUNCTION__,id);
+      return ERROR;
+    }
+
+  if((ntrig<0) || (ntrig>0xff))
+    {
+      printf("\n%s: ERROR: Invalid ntrig (%d).\n\n",
+	     __FUNCTION__,ntrig);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.ntrig_busy, ntrig);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Set the number of un-processed triggers in the trigger buffer before
+ *     the module goes BUSY, for all initialized modules.
+ *  @param ntrig Number of Triggers
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125GSetNTrigBusy(int ntrig)
+{
+  int id=0;
+  if((ntrig<0) || (ntrig>0xff))
+    {
+      printf("\n%s: ERROR: Invalid ntrig (%d).\n\n",
+	     __FUNCTION__,ntrig);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  for(id=0; id<nfa125; id++)
+    vmeWrite32(&fa125p[fa125Slot(id)]->proc.ntrig_busy, ntrig);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Get the number of un-processed triggers in the trigger buffer before
+ *     the module goes BUSY
+ *  @param id Slot number
+ *  @return Number of Triggers if successful, otherwise ERROR.
+ */
+int
+fa125GetNTrigBusy(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",
+	     __FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = vmeRead32(&fa125p[id]->proc.ntrig_busy) & FA125_NTRIG_BUSY_MASK;
+  FA125UNLOCK;
+
+  return rval;
+}
+
 
 /**
  *  @ingroup Readout
@@ -5246,28 +5363,34 @@ fa125FirmwareGCheckErrors()
   return rval;
 }
 
+/* Processing Mode Names (long version)
+   Indices are in library convention (HW+1)
+*/
 const char *fa125_mode_names[FA125_MAXIMUM_NMODES] = 
   {
     "", // 0 
     "", // 1
     "", // 2
-    "Integral and Time (CDC)",       // 3
-    "Integral and Time (FDC)",       // 4
-    "Peak Amplitude and Time (FDC_amp)", // 5
-    "Pulse Samples (CDC_long)",           // 6
-    "Pulse Samples (FDC_long)",            // 7
+    "Integral and Time (CDC_short)",             // 3
+    "Integral and Time (FDC_short)",             // 4
+    "Peak Amplitude and Time (FDC_amp_short)",   // 5
+    "Pulse Data and Samples (CDC_long)",         // 6
+    "Pulse Data and Samples (FDC_sum_long)",     // 7
     "Peak Amplitude and Samples (FDC_amp_long)", // 8
   };
 
+/* Processing Mode Names (short version)
+   Indices are in library convention (HW+1)
+*/
 const char *fa125_modes[FA125_MAXIMUM_NMODES] =
   {
     "", // 0 
     "", // 1
     "", // 2
-    "CDC",      // 3
-    "FDC",      // 4
-    "FDC_amp",  // 5
-    "CDC_long", // 6
-    "FDC_long", // 7
-    "FDC_amp_long", // 8
+    "CDC_short",      // 3
+    "FDC_short",      // 4
+    "FDC_amp_short",  // 5
+    "CDC_long",       // 6
+    "FDC_sum_long",   // 7
+    "FDC_amp_long",   // 8
   };
