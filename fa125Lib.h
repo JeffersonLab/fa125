@@ -412,8 +412,9 @@ typedef enum
 #define FA125_FDC_MODES							\
   {   FA125_PROC_MODE_FDC_INTEGRAL,					\
       FA125_PROC_MODE_FDC_PEAKAMP,					\
-      FA125_PROC_MODE_FDC_PULSESAMPLES}
-#define FA125_FDC_NMODES 3
+      FA125_PROC_MODE_FDC_PULSESAMPLES,					\
+      FA125_PROC_MODE_FDC_AMPSAMPLES}
+#define FA125_FDC_NMODES 4
 
 extern const char *fa125_mode_names[FA125_MAXIMUM_NMODES];
 extern const char *fa125_modes[FA125_MAXIMUM_NMODES];
