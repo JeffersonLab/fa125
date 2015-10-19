@@ -1084,7 +1084,11 @@ fa125GetModeNumber(char *mode)
     {
       if(strlen(fa125_modes[imode])==0) continue;
 
+#ifdef VXWORKS
+      if(strcmp(mode,fa125_modes[imode])==0)
+#else
       if(strcasecmp(mode,fa125_modes[imode])==0)
+#endif
 	{
 	  return imode;
 	}
