@@ -114,9 +114,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020005
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020005
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00020005
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020006
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020006
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00020006
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -447,6 +447,7 @@ int  fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi);
 void fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi);
 int  fa125GetTimingThreshold(int id, unsigned int chan);
 int  fa125PrintTimingThresholds(int id);
+int  fa125CheckThresholds(int id, int pflag);
 int  fa125Slot(unsigned int i);
 int  fa125PowerOff(int id);
 int  fa125PowerOn(int id);
@@ -461,6 +462,7 @@ int  fa125SetChannelEnable(int id, int channel);
 int  fa125SetChannelEnableMask(int id, unsigned int cmask0, unsigned int cmask1, unsigned int cmask2);
 int  fa125SetCommonThreshold(int id, unsigned short tvalue);
 void fa125GSetCommonThreshold(unsigned short tvalue);
+int  fa125GetThreshold(int id, int chan);
 int  fa125PrintThreshold(int id);
 int  fa125SetPulserAmplitude(int id, int chan, int dacData);
 int  fa125PrintTemps(int id);

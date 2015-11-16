@@ -815,6 +815,9 @@ fa125Status(int id, int pflag)
   printf(" Trig  Count = %d\n",p.trig_count);
   printf(" Ev    Count = %d\n",p.ev_count);
 
+  printf("\n");
+  fa125CheckThresholds(id,1);
+
   printf("--------------------------------------------------------------------------------\n");
   return OK;
 
@@ -833,6 +836,7 @@ fa125GStatus(int pflag)
   struct fa125_a24_proc p[20];
   struct fa125_a24_fe   f[20];
   unsigned int a24addr[20];
+  int th_check[20];
 
   FA125LOCK;
   for (ifa=0;ifa<nfa125;ifa++) 
@@ -868,6 +872,13 @@ fa125GStatus(int pflag)
       f[id].ped_sf  = vmeRead32(&fa125p[id]->fe[0].ped_sf);
     }
   FA125UNLOCK;
+
+  for (ifa=0;ifa<nfa125;ifa++) 
+    {
+      id = fa125Slot(ifa);
+      th_check[id] = fa125CheckThresholds(id, 0);
+    }
+
 
   printf("\n");
   
@@ -997,8 +1008,8 @@ fa125GStatus(int pflag)
   printf("\n");
   printf("                        fADC125 Processing Mode Config\n\n");
   printf("             Pedestal Windows               Scale   \n");
-  printf("       ---Initial---  ----Local----      ..Factors..            Playback\n");
-  printf("Slot   P1 ...NP1....  P2 ...NP2....      I    A    P      NPK     Mode \n");
+  printf("       ---Initial---  ----Local----      ..Factors..            Playback  Thres\n");
+  printf("Slot   P1 ...NP1....  P2 ...NP2....      I    A    P      NPK     Mode    Check\n");
   printf("--------------------------------------------------------------------------------\n");
   for(ifa=0; ifa<nfa125; ifa++)
     {
@@ -1021,8 +1032,11 @@ fa125GStatus(int pflag)
 
       printf("%2d    ", (f[id].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
 
-      printf("%s",
+      printf("%s   ",
 	     (f[id].config1 & FA125_FE_CONFIG1_PLAYBACK_ENABLE) ?" Enabled":"Disabled");
+
+      printf("%s",
+	     (th_check[id]==OK)?" OK":"ERR");
 
       printf("\n");
     }
@@ -1629,6 +1643,55 @@ fa125PrintTimingThresholds(int id)
   return OK;
 }
 
+int
+fa125CheckThresholds(int id, int pflag)
+{
+  int rval=OK, ichan, tval, lo, hi, th;
+  int header_printed=0;
+  if(id==0) id=fa125ID[0];
+  
+  if((id<0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id);
+      return ERROR;
+    }
+
+  for(ichan=0; ichan<FA125_MAX_ADC_CHANNELS; ichan++)
+    {
+      tval = fa125GetTimingThreshold(id, ichan);
+      lo   = tval>>8;
+      hi   = tval&0x1FF;
+      th   = fa125GetThreshold(id, ichan);
+
+      if( !( (hi>th) && (th>lo) ) )
+	{
+	  rval = ERROR;
+	  if(pflag)
+	    {
+	      if(header_printed==0)
+		{
+		  printf("\n");
+		  printf("%s: ERROR: Invalid Threshold Settings for Module in slot %d\n",
+			 __FUNCTION__, id);
+		  header_printed=1;
+		}
+	      printf("  chan = %3d  lo = %4d  th = %4d  hi = %4d\n",
+		     ichan, lo, th, hi);
+	    }
+	}
+    }
+
+  if(pflag)
+    {
+      if(rval==ERROR)
+	printf("\n");
+      else
+	printf("%s: Threshold conditions OK!\n",
+	       __FUNCTION__);
+    }
+
+  return rval;
+}
 
 /**
  *  @ingroup Config
@@ -2187,6 +2250,24 @@ fa125GSetCommonThreshold(unsigned short tvalue)
     {
       fa125SetCommonThreshold(fa125Slot(ii),tvalue);
     }
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Return the value for the readout threshold for specified channel and module.
+ *  @param id Slot number
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125GetThreshold(int id, int chan)
+{
+  int rval=0;
+
+  FA125LOCK;
+  rval = vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]);
+  FA125UNLOCK;
+
+  return rval;
 }
 
 /**
