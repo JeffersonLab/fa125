@@ -445,7 +445,7 @@ int  fa125GetPedestalScaleFactor(int id);
 int  fa125SetTimingThreshold(int id, unsigned int chan, unsigned int lo, unsigned int hi);
 int  fa125SetCommonTimingThreshold(int id, unsigned int lo, unsigned int hi);
 void fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi);
-int  fa125GetTimingThreshold(int id, unsigned int chan);
+int  fa125GetTimingThreshold(int id, unsigned int chan, int *lo, int *hi);
 int  fa125PrintTimingThresholds(int id);
 int  fa125CheckThresholds(int id, int pflag);
 int  fa125Slot(unsigned int i);
