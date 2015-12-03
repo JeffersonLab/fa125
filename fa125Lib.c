@@ -1556,8 +1556,6 @@ fa125GSetCommonTimingThreshold(unsigned int lo, unsigned int hi)
 int
 fa125GetTimingThreshold(int id, unsigned int chan, int *lo, int *hi)
 {
-  unsigned int rval=0;
-  
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
