@@ -1,0 +1,3 @@
+#!/bin/bash
+EXP=`git log --pretty=format:"%ad" -1`
+sed -e s/__DATE__:/__DATE__:"$EXP"/g $1

@@ -33,6 +33,8 @@ extern int vmeBerrStatus;
 #define FA125_ADDR (15<<19)
 #define TI_ADDR (21<<19)
 
+#define BLOCKLEVEL 1
+
 FILE *outfile=NULL;
 
 int 
@@ -84,10 +86,10 @@ main(int argc, char *argv[])
   /*     gefVmeSetDebugFlags(vmeHdl,0x0); */
   /* Set the TI structure pointer */
   /*     tiInit((2<<19),TI_READOUT_EXT_POLL,0); */
-  tiInit(TI_ADDR,TI_READOUT_EXT_POLL,1);
+  tiInit(TI_ADDR,TI_READOUT_EXT_POLL,TI_INIT_SKIP_FIRMWARE_CHECK);
   tiCheckAddresses();
 
-  tiSetBlockLimit(0);
+  tiSetBlockLimit(10000);
 
   char mySN[20];
   printf("0x%08x\n",tiGetSerialNumber((char **)&mySN));
@@ -100,11 +102,11 @@ main(int argc, char *argv[])
 
   tiLoadTriggerTable(0);
     
-  tiSetTriggerHoldoff(1,4,0);
-  tiSetTriggerHoldoff(2,4,0);
+  tiSetTriggerHoldoff(1,1,1);
+  tiSetTriggerHoldoff(2,4,1);
 
   tiSetPrescale(0);
-  tiSetBlockLevel(1);
+  tiSetBlockLevel(BLOCKLEVEL);
 
   stat = tiIntConnect(TI_INT_VEC, myISR, 0);
   if (stat != OK) 
@@ -127,7 +129,7 @@ main(int argc, char *argv[])
 
   tiSetBusySource(TI_BUSY_LOOPBACK,1);
 
-  tiSetBlockBufferLevel(1);
+  tiSetBlockBufferLevel(4);
 
   tiSetFiberDelay(1,2);
   tiSetSyncDelayWidth(1,0x3f,1);
@@ -138,7 +140,7 @@ main(int argc, char *argv[])
   taskDelay(1);
   tiEnableVXSSignals();
   taskDelay(1);
-  tiSyncReset(1);
+  //  tiSyncReset(1);
 
   taskDelay(1);
     
@@ -167,8 +169,19 @@ main(int argc, char *argv[])
   */
   iFlag |= (0<<1);  /* Trigger Source */
   iFlag |= (1<<4);  /* Clock Source */
+  iFlag |= (1<<18); /*skip fw check?*/
+
+  //fa125SetByteSwap(0,0);
+  int iadc=0, faslot=0;
+  int rval=0;
+  extern int nfa125;
+
+
 
   stat = fa125Init(3<<19,1<<19,nmods,iFlag);
+  //stat = fa125Init(9<<19,1<<19,1,iFlag);
+  fa125GStatus(0);
+
   if (stat != OK) 
     {
       printf("ERROR: fa125Init failed \n");
@@ -182,9 +195,6 @@ main(int argc, char *argv[])
 
   getchar();
 
-  fa125SetByteSwap(0,0);
-  int iadc=0, faslot=0;
-  extern int nfa125;
 
   fa125ResetToken(0);
   for(iadc=0; iadc<nfa125; iadc++)
@@ -195,7 +205,7 @@ main(int argc, char *argv[])
       int ichan=0;
       for(ichan=0; ichan<72; ichan++)
 	{
-	  fa125SetOffset(faslot,ichan,0x8000);
+	  fa125SetOffset(faslot,ichan,0x4000);
 	}
       int i=0;
       for(i=0; i<3 ; i++)
@@ -203,44 +213,68 @@ main(int argc, char *argv[])
 	  /*adc125SetPulserAmplitude(0,i,key_value);*/
 	  fa125SetPulserAmplitude(0,i,0x8000);
 	}
-      
+
+      fa125SetCommonThreshold(faslot,0x0);
+
+      //fa125SetChannelEnableMask(fa125Slot(iadc),0x0,0x0,0x0);
+      //fa125SetChannelEnableMask(fa125Slot(iadc),0x414141,0x414141,0x414141);
+      fa125SetChannelEnableMask(fa125Slot(iadc),0xFFFFFF,0xFFFFFF,0xFFFFFF);
+      fa125SetScaleFactors(faslot,0,0,4);
+
+
       fa125PrintTemps(faslot);
 /*       fa125Clear(faslot); */
 
-      fa125SetBlocklevel(faslot, 1);
+      fa125SetBlocklevel(faslot, BLOCKLEVEL);
 
       fa125Reset(faslot, 0);
+
+      rval = fa125SetProcMode(faslot,"CDC_long",100,100,40,4,1,4,4);
+
+      if(rval==ERROR)
+        {
+          printf("ERROR!\n");
+          goto CLOSE;
+        }
       fa125Enable(faslot);
       fa125Status(faslot,1);
     }
 
   fa125ResetToken(0);
+  fa125GStatus(0);
+  tiSyncReset(1);
 
   printf("Hit any key to enable Triggers...\n");
   getchar();
+  fa125GStatus(0);
 
   /* Enable the TI and clear the trigger counter */
+
   tiIntEnable(0);
   tiStatus(1);
 #define SOFTTRIG
 #ifdef SOFTTRIG
-  tiSetRandomTrigger(1,9);
+  tiSetRandomTrigger(1,0x3);
   taskDelay(10);
-  tiSoftTrig(1,0x1,0x700,0);
+  //tiSoftTrig(1,0x1,0x700,0);
 #endif
 
 
   printf("Hit any key to Disable TIR and exit.\n");
   getchar();
 
+  tiSetBlockLimit(1);
   tiStatus(1);
+
 
 #ifdef SOFTTRIG
   /* No more soft triggers */
   /*     tidSoftTrig(0x0,0x8888,0); */
-  tiSoftTrig(1,0,0x700,0);
+  //  tiSoftTrig(1,0,0x700,0);
   tiDisableRandomTrigger();
 #endif
+
+  fa125GStatus(faslot);
 
   for(iadc=0; iadc<nfa125; iadc++)
     {
@@ -423,7 +457,9 @@ myISR(int arg)
 /* 	    { */
 /* 	      rflag=1; */
 	      faslot = fa125Slot(iadc);
-	      dCnt = fa125ReadBlock(faslot,(volatile UINT32 *)dma_dabufp,0x6000,rflag);
+	      //dCnt = fa125ReadBlock(faslot,(volatile UINT32 *)dma_dabufp,0x6000,rflag);
+	      dCnt = fa125ReadBlock(faslot,(volatile UINT32 *)dma_dabufp,0xF000,rflag);
+
 /* 	      if(fa125BlockError) */
 /* 		{ */
 /* 		  printf("vmeBerrStatus = %d\n", vmeBerrStatus=0); */
@@ -474,22 +510,26 @@ myISR(int arg)
     {
       if(((len!=outEvent->length) && (tiIntCount!=1)) || (fa125BlockError==1))
 	{
-	  printf("%6d:  prev event length = %d  now = %d   fa125BlockError = %d\n",
-		 tiIntCount,len,outEvent->length,fa125BlockError);
+	  //	  printf("%6d:  prev event length = %d  now = %d   fa125BlockError = %d\n",
+	  //		 tiIntCount,len,outEvent->length,fa125BlockError);
+
+	  
 #define PRINTCRAP
 #ifdef PRINTCRAP
-	  for(idata=0;idata<outEvent->length;idata++)
-	    {
-	      fa125DecodeData(LSWAP(outEvent->data[idata]));
+	  	  for(idata=0;idata<outEvent->length;idata++)
+	  {
+	    //	    fa125DecodeData(LSWAP(outEvent->data[idata]));
 	    }
-	  tiSetBlockLimit(1);
+		  //tiSetBlockLimit(1);
+
 #endif
 	}
 
       len = outEvent->length;
-
+	  
 #ifdef FOUT      
       fprintf(outfile,"%8d %d\n",tiIntCount,len);
+	  
 
       for(idata=0;idata<len;idata++)
 	{
@@ -504,8 +544,10 @@ myISR(int arg)
       fprintf(outfile,"\n");
 #endif //FOUT
     }
+
 /*   printf("<Enter> to continue\n"); */
 /*   getchar(); */
+
 #endif
   dmaPFreeItem(outEvent);
 
@@ -513,6 +555,7 @@ myISR(int arg)
     {
       printf("Received %d triggers...\n",
 	     tiIntCount);
+      fa125GStatus(faslot);
     }
 /*     sleep(1); */
 }
