@@ -1283,8 +1283,10 @@ fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW,
  */
 
 int
-fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int PBIT)
+fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT)
 {
+  int pbit_sign=0;
+  unsigned int ped_sf=0, p2=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1307,18 +1309,46 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int 
       return ERROR;
     }
 
-  if(PBIT>FA125_MAX_PBIT)
+  if(abs(PBIT)>FA125_MAX_PBIT)
     {
       printf("\n%s: ERROR: Invalid PBIT scale factor. Must be <= %d\n\n",
 	     __FUNCTION__,FA125_MAX_PBIT);
       return ERROR;
     }
 
+  if(PBIT<0)
+    pbit_sign = 1;
+
+
   FA125LOCK;
+  ped_sf = vmeRead32(&fa125p[id]->fe[0].ped_sf);
+  p2     = 1<<((ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8);
+
+  if((p2 + PBIT) < 0)
+    {
+      printf("%s: ERROR: P2 + PBIT < 0  (%d + %d) = %d\n",
+	     __FUNCTION__, p2, PBIT, p2 + PBIT);
+      printf("\tSetting PBIT = -P2 = -%d\n",
+	     p2);
+      PBIT = p2;
+      pbit_sign = 1;
+    }
+
+  if((p2 + PBIT) > 7)
+    {
+      printf("%s: ERROR: P2 + PBIT > 7  (%d + %d) = %d\n",
+	     __FUNCTION__, p2, PBIT, p2 + PBIT);
+      printf("\tSetting PBIT = 7 - P2 = %d\n",
+	     7 - p2);
+      PBIT = 7 - p2;
+      if(PBIT<0)
+	pbit_sign = 1;
+    }
+
   vmeWrite32(&fa125p[id]->fe[0].ped_sf, 
-	     (vmeRead32(&fa125p[id]->fe[0].ped_sf) & 
+	     (ped_sf & 
 	      (FA125_FE_PED_SF_NP_MASK | FA125_FE_PED_SF_NP2_MASK)) |
-	     (IBIT<<16) | (ABIT<<19) | (PBIT<<22) );
+	     (IBIT<<16) | (ABIT<<19) | (PBIT<<22) | (pbit_sign<<25));
   FA125UNLOCK;
 
   return OK;
