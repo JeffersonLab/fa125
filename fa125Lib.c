@@ -1675,7 +1675,7 @@ fa125PrintTimingThresholds(int id)
 int
 fa125CheckThresholds(int id, int pflag)
 {
-  int rval=OK, ichan, tval, lo, hi, th;
+  int rval=OK, ichan, tval, TL, TH, H;
   int header_printed=0;
   if(id==0) id=fa125ID[0];
   
@@ -1687,12 +1687,12 @@ fa125CheckThresholds(int id, int pflag)
 
   for(ichan=0; ichan<FA125_MAX_ADC_CHANNELS; ichan++)
     {
-      tval = fa125GetTimingThreshold(id, ichan, &lo, &hi);
+      tval = fa125GetTimingThreshold(id, ichan, &TL, &TH);
       if(tval==ERROR)
 	return ERROR;
-      th   = fa125GetThreshold(id, ichan);
+      H   = fa125GetThreshold(id, ichan);
 
-      if( !( (hi>th) && (th>lo) ) )
+      if( !( (H>TH) && (TH>TL) ) )
 	{
 	  rval = ERROR;
 	  if(pflag)
@@ -1705,7 +1705,7 @@ fa125CheckThresholds(int id, int pflag)
 		  header_printed=1;
 		}
 	      printf("  chan = %3d  H = %4d  TL = %4d  TH = %4d\n",
-		     ichan, th, lo, hi);
+		     ichan, H, TL, TH);
 	    }
 	}
     }
