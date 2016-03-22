@@ -798,7 +798,8 @@ fa125Status(int id, int pflag)
   printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n",
 	 ((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
 	 ((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
-	 ((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+	 ((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22) * 
+	 ((-1)^(f[0].ped_sf & FA125_FE_PED_SF_PBIT_SIGN) ));
   printf("             (2**IBIT) = %-3d        (2**ABIT) = %-3d       (2**PBIT) = %-d\n\n",
 	 1<<((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
 	 1<<((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
@@ -1028,7 +1029,8 @@ fa125GStatus(int pflag)
 
       printf("%d    ", (f[id].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19);
 
-      printf("%d      ", (f[id].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22);
+      printf("%2d     ", ((f[id].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22 )
+	     * ((-1)^(f[0].ped_sf & FA125_FE_PED_SF_PBIT_SIGN)));
 
       printf("%2d    ", (f[id].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
 
@@ -1414,6 +1416,7 @@ int
 fa125GetPedestalScaleFactor(int id)
 {
   int rval=0;
+  unsigned int ped_sf=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1423,7 +1426,9 @@ fa125GetPedestalScaleFactor(int id)
     }
 
   FA125LOCK;
-  rval = (vmeRead32(&fa125p[id]->fe[0].ped_sf) & FA125_FE_PED_SF_PBIT_MASK)>>22;
+  ped_sf = vmeRead32(&fa125p[id]->fe[0].ped_sf);
+  rval = ((ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22)
+    * ((-1)^(ped_sf & FA125_FE_PED_SF_PBIT_SIGN));
   FA125UNLOCK;
 
   return rval;
