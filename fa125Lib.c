@@ -1321,8 +1321,6 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT)
   if(PBIT<0)
     pbit_sign_bit = 1;
 
-  uint_PBIT = pbit_sign_bit ? (unsigned int)((-1) * PBIT) : PBIT;
-
   FA125LOCK;
   ped_sf = vmeRead32(&fa125p[id]->fe[0].ped_sf);
   p2     = ((ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8);
@@ -1331,10 +1329,9 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT)
     {
       printf("%s: ERROR: P2 + PBIT < 0  (%d + %d) = %d\n",
 	     __FUNCTION__, p2, PBIT, p2 + PBIT);
-      printf("\tSetting PBIT = -P2 = -%d\n",
-	     p2);
-      PBIT = p2;
-      pbit_sign_bit = 1;
+      printf("\tSetting PBIT to default = %d\n", FA125_DEFAULT_PBIT);
+      PBIT = FA125_DEFAULT_PBIT;
+      pbit_sign_bit = 0;
       rval = ERROR;
     }
 
@@ -1342,14 +1339,14 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT)
     {
       printf("%s: ERROR: P2 + PBIT > 7  (%d + %d) = %d\n",
 	     __FUNCTION__, p2, PBIT, p2 + PBIT);
-      printf("\tSetting PBIT = 7 - P2 = %d\n",
-	     7 - p2);
-      PBIT = 7 - p2;
-      if(PBIT<0)
-	pbit_sign_bit = 1;
+      printf("\tSetting PBIT to default = %d\n", FA125_DEFAULT_PBIT);
+      PBIT = FA125_DEFAULT_PBIT;
+      pbit_sign_bit = 0;
 
       rval = ERROR;
     }
+
+  uint_PBIT = pbit_sign_bit ? (unsigned int)((-1) * PBIT) : PBIT;
 
   vmeWrite32(&fa125p[id]->fe[0].ped_sf, 
 	     (ped_sf & 
@@ -2306,7 +2303,7 @@ fa125GetThreshold(int id, int chan)
   int rval=0;
 
   FA125LOCK;
-  rval = vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]);
+  rval = vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & FA125_FE_THRESHOLD_MASK;
   FA125UNLOCK;
 
   return rval;
