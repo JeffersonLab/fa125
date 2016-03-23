@@ -800,11 +800,13 @@ fa125Status(int id, int pflag)
 	 ((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
 	 ((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
 	 sign*((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
-  printf("             (2**IBIT) = %-3d        (2**ABIT) = %-3d       (2**PBIT) = %-d\n\n",
+  printf("             (2**IBIT) = %-3d        (2**ABIT) = %-3d       (2**PBIT) = ",
 	 1<<((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
-	 1<<((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
-	 1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
-	 
+	 1<<((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19));
+  if(sign==1)
+    printf("%-2d\n\n",1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+  else
+    printf("1/%-2d\n\n",1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
 
   printf("  Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
   printf("  Playback Mode    = %s \n",
@@ -1287,8 +1289,8 @@ fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW,
 int
 fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT)
 {
-  int rval=OK, pbit_sign_bit=0;
-  unsigned int ped_sf=0, p2=0, check=0, uint_PBIT=0;
+  int rval=OK, pbit_sign_bit=0, p2=0;
+  unsigned int ped_sf=0, check=0, uint_PBIT=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 

@@ -53,9 +53,9 @@ main(int argc, char *argv[])
 		   4,   // P1
 		   4    // P2
 		   );
-  fa125SetScaleFactors(0, 3, 2, 2);
-  fa125SetCommonTimingThreshold(0,25,100);
-  fa125SetCommonThreshold(0,125);
+  fa125SetScaleFactors(0, 3, 2, 3);
+  fa125SetCommonTimingThreshold(0,21,103);
+  fa125SetCommonThreshold(0,111);
   fa125Status(0,0);
   fa125GStatus(0);
   fa125PrintThreshold(0);
