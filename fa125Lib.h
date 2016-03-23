@@ -224,6 +224,7 @@ struct fa125_a32
 #define FA125_FE_PED_SF_ABIT_MASK     0x00380000
 #define FA125_FE_PED_SF_PBIT_MASK     0x01C00000
 #define FA125_FE_PED_SF_PBIT_SIGN     (1<<25)
+#define FA125_FE_PED_SF_CALC_MASK     0x1C000000
 
 /* 0xN0A4 FE timing_thres_lo definitions */
 #define FA125_FE_TIMING_THRES_LO_MASK(x) (0xFF<<(8+((x%2)*16)))
