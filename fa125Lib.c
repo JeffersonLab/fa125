@@ -573,7 +573,7 @@ fa125Status(int id, int pflag)
   struct fa125_a24_fe   f[12];
   unsigned int clksrc, trigsrc, srsrc;
   unsigned int faBase, a32Base, ambMin, ambMax;
-  int i=0, showregs=0;
+  int i=0, showregs=0, sign=1;
 
   if(id==0) id=fa125ID[0];
   
@@ -625,6 +625,7 @@ fa125Status(int id, int pflag)
   f[0].pl        = vmeRead32(&fa125p[id]->fe[0].pl) & FA125_FE_PL_MASK;
   f[0].ie        = vmeRead32(&fa125p[id]->fe[0].ie);
   f[0].ped_sf    = vmeRead32(&fa125p[id]->fe[0].ped_sf);
+  sign           = (f[0].ped_sf&FA125_FE_PED_SF_PBIT_SIGN)?-1:1;
 
   for(i=0; i<12; i++)
     {
@@ -798,12 +799,14 @@ fa125Status(int id, int pflag)
   printf("    Integration (IBIT) = %d   Amplitude (ABIT) = %d   Pedestal (PBIT) = %d\n",
 	 ((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
 	 ((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
-	 ((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
-  printf("             (2**IBIT) = %-3d        (2**ABIT) = %-3d       (2**PBIT) = %-d\n\n",
+	 sign*((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+  printf("             (2**IBIT) = %-3d        (2**ABIT) = %-3d       (2**PBIT) = ",
 	 1<<((f[0].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16),
-	 1<<((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19),
-	 1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
-	 
+	 1<<((f[0].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19));
+  if(sign==1)
+    printf("%-2d\n\n",1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
+  else
+    printf("1/%-2d\n\n",1<<((f[0].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22));
 
   printf("  Max Peak Count   = %d \n",(f[0].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
   printf("  Playback Mode    = %s \n",
@@ -836,7 +839,7 @@ fa125GStatus(int pflag)
   struct fa125_a24_proc p[20];
   struct fa125_a24_fe   f[20];
   unsigned int a24addr[20];
-  int th_check[20];
+  int th_check[20], sign[20];
 
   FA125LOCK;
   for (ifa=0;ifa<nfa125;ifa++) 
@@ -870,6 +873,7 @@ fa125GStatus(int pflag)
       f[id].nw      = vmeRead32(&fa125p[id]->fe[0].nw) & FA125_FE_NW_MASK;
       f[id].ie      = vmeRead32(&fa125p[id]->fe[0].ie);
       f[id].ped_sf  = vmeRead32(&fa125p[id]->fe[0].ped_sf);
+      sign[id]      = (f[id].ped_sf & FA125_FE_PED_SF_PBIT_SIGN)?-1:1;
     }
   FA125UNLOCK;
 
@@ -1026,9 +1030,9 @@ fa125GStatus(int pflag)
 
       printf("%d    ", (f[id].ped_sf & FA125_FE_PED_SF_IBIT_MASK)>>16);
 
-      printf("%d    ", (f[id].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19);
+      printf("%d   ", (f[id].ped_sf & FA125_FE_PED_SF_ABIT_MASK)>>19);
 
-      printf("%d      ", (f[id].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22);
+      printf("%2d      ", sign[id] * ((f[id].ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22 ));
 
       printf("%2d    ", (f[id].config1 & FA125_FE_CONFIG1_NPULSES_MASK)>>4);
 
@@ -1283,8 +1287,10 @@ fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW,
  */
 
 int
-fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int PBIT)
+fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT)
 {
+  int rval=OK, pbit_sign_bit=0, p2=0;
+  unsigned int ped_sf=0, check=0, uint_PBIT=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1307,21 +1313,59 @@ fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int 
       return ERROR;
     }
 
-  if(PBIT>FA125_MAX_PBIT)
+  if(abs(PBIT)>FA125_MAX_PBIT)
     {
       printf("\n%s: ERROR: Invalid PBIT scale factor. Must be <= %d\n\n",
 	     __FUNCTION__,FA125_MAX_PBIT);
       return ERROR;
     }
 
+  if(PBIT<0)
+    pbit_sign_bit = 1;
+
   FA125LOCK;
+  ped_sf = vmeRead32(&fa125p[id]->fe[0].ped_sf);
+  p2     = ((ped_sf & FA125_FE_PED_SF_NP2_MASK)>>8);
+
+  if((p2 + PBIT) < 0)
+    {
+      printf("%s: ERROR: P2 + PBIT < 0  (%d + %d) = %d\n",
+	     __FUNCTION__, p2, PBIT, p2 + PBIT);
+      printf("\tSetting PBIT to default = %d\n", FA125_DEFAULT_PBIT);
+      PBIT = FA125_DEFAULT_PBIT;
+      pbit_sign_bit = 0;
+      rval = ERROR;
+    }
+
+  if((p2 + PBIT) > 7)
+    {
+      printf("%s: ERROR: P2 + PBIT > 7  (%d + %d) = %d\n",
+	     __FUNCTION__, p2, PBIT, p2 + PBIT);
+      printf("\tSetting PBIT to default = %d\n", FA125_DEFAULT_PBIT);
+      PBIT = FA125_DEFAULT_PBIT;
+      pbit_sign_bit = 0;
+
+      rval = ERROR;
+    }
+
+  uint_PBIT = pbit_sign_bit ? (unsigned int)((-1) * PBIT) : PBIT;
+
   vmeWrite32(&fa125p[id]->fe[0].ped_sf, 
-	     (vmeRead32(&fa125p[id]->fe[0].ped_sf) & 
+	     (ped_sf & 
 	      (FA125_FE_PED_SF_NP_MASK | FA125_FE_PED_SF_NP2_MASK)) |
-	     (IBIT<<16) | (ABIT<<19) | (PBIT<<22) );
+	     (IBIT<<16) | (ABIT<<19) | (uint_PBIT<<22) | (pbit_sign_bit<<25));
+  check = (vmeRead32(&fa125p[id]->fe[0].ped_sf) & FA125_FE_PED_SF_CALC_MASK) >> 26;
+
+  if(check != (p2 + PBIT))
+    {
+      printf("%s: FIRMWARE ERROR:  P2 + PBIT  fw:  = %d    lib: %d\n",
+	     __FUNCTION__,check, p2 + PBIT);
+      printf("   register = 0x%08x\n",vmeRead32(&fa125p[id]->fe[0].ped_sf));
+      rval = ERROR;
+    }
   FA125UNLOCK;
 
-  return OK;
+  return rval;
 }
 
 /**
@@ -1383,7 +1427,8 @@ fa125GetAmplitudeScaleFactor(int id)
 int
 fa125GetPedestalScaleFactor(int id)
 {
-  int rval=0;
+  int rval=0, sign=1;
+  unsigned int ped_sf=0;
   if(id==0) id=fa125ID[0];
   
   if((id<0) || (id>21) || (fa125p[id] == NULL)) 
@@ -1393,7 +1438,9 @@ fa125GetPedestalScaleFactor(int id)
     }
 
   FA125LOCK;
-  rval = (vmeRead32(&fa125p[id]->fe[0].ped_sf) & FA125_FE_PED_SF_PBIT_MASK)>>22;
+  ped_sf = vmeRead32(&fa125p[id]->fe[0].ped_sf);
+  sign   = (ped_sf & FA125_FE_PED_SF_PBIT_SIGN)?-1:1;
+  rval   = sign * ((ped_sf & FA125_FE_PED_SF_PBIT_MASK)>>22);
   FA125UNLOCK;
 
   return rval;
@@ -1640,7 +1687,7 @@ fa125PrintTimingThresholds(int id)
 int
 fa125CheckThresholds(int id, int pflag)
 {
-  int rval=OK, ichan, tval, lo, hi, th;
+  int rval=OK, ichan, tval, TL, TH, H;
   int header_printed=0;
   if(id==0) id=fa125ID[0];
   
@@ -1652,12 +1699,12 @@ fa125CheckThresholds(int id, int pflag)
 
   for(ichan=0; ichan<FA125_MAX_ADC_CHANNELS; ichan++)
     {
-      tval = fa125GetTimingThreshold(id, ichan, &lo, &hi);
+      tval = fa125GetTimingThreshold(id, ichan, &TL, &TH);
       if(tval==ERROR)
 	return ERROR;
-      th   = fa125GetThreshold(id, ichan);
+      H   = fa125GetThreshold(id, ichan);
 
-      if( !( (hi>th) && (th>lo) ) )
+      if( !( (H>TH) && (TH>TL) ) )
 	{
 	  rval = ERROR;
 	  if(pflag)
@@ -1670,7 +1717,7 @@ fa125CheckThresholds(int id, int pflag)
 		  header_printed=1;
 		}
 	      printf("  chan = %3d  H = %4d  TL = %4d  TH = %4d\n",
-		     ichan, th, lo, hi);
+		     ichan, H, TL, TH);
 	    }
 	}
     }
@@ -2258,7 +2305,7 @@ fa125GetThreshold(int id, int chan)
   int rval=0;
 
   FA125LOCK;
-  rval = vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]);
+  rval = vmeRead32(&fa125p[id]->fe[chan/6].threshold[chan%6]) & FA125_FE_THRESHOLD_MASK;
   FA125UNLOCK;
 
   return rval;

@@ -114,9 +114,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020007
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020007
-#define FA125_FE_SUPPORTED_FIRMWARE     0x00020007
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x0002000F
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x0002000F
+#define FA125_FE_SUPPORTED_FIRMWARE     0x0002000F
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -223,6 +223,8 @@ struct fa125_a32
 #define FA125_FE_PED_SF_IBIT_MASK     0x00070000
 #define FA125_FE_PED_SF_ABIT_MASK     0x00380000
 #define FA125_FE_PED_SF_PBIT_MASK     0x01C00000
+#define FA125_FE_PED_SF_PBIT_SIGN     (1<<25)
+#define FA125_FE_PED_SF_CALC_MASK     0x1C000000
 
 /* 0xN0A4 FE timing_thres_lo definitions */
 #define FA125_FE_TIMING_THRES_LO_MASK(x) (0xFF<<(8+((x%2)*16)))
@@ -379,7 +381,7 @@ typedef enum
 
 #define FA125_MAX_IBIT    7
 #define FA125_MAX_ABIT    3
-#define FA125_MAX_PBIT    3
+#define FA125_MAX_PBIT    7
 
 #define FA125_MAX_LOW_TTH    0xFF
 #define FA125_MAX_HIGH_TTH  0x1FF
@@ -438,7 +440,7 @@ void fa125GStatus(int pflag);
 int  fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW, 
 		      unsigned int IE, unsigned int PG, unsigned int NPK,
 		      unsigned int P1, unsigned int P2);
-int  fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, unsigned int PBIT);
+int  fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT);
 int  fa125GetIntegrationScaleFactor(int id);
 int  fa125GetAmplitudeScaleFactor(int id);
 int  fa125GetPedestalScaleFactor(int id);
