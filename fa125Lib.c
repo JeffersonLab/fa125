@@ -3329,6 +3329,55 @@ fa125GBready()
 }
 
 /**
+ *  @ingroup Readout
+ *  @brief Return a Block Ready status mask for fa125s indicated in supplied slotmask
+ *  @param slotmask Slotmask Slotmask of fa125s to check for block ready
+ *  @param nloop Number of times to iterate through slotmask.
+ *  @return block ready mask, otherwise ERROR.
+*/
+unsigned int
+fa125GBlockReady(unsigned int slotmask, int nloop)
+{
+  int iloop, ibit, id, stat=0;
+  unsigned int dmask=0;
+
+  FA125LOCK;
+  for(iloop = 0; iloop < nloop; iloop++)
+    {
+
+      for(ibit = 0; ibit < 21; ibit++) 
+	{
+
+	  if(slotmask & (1<<ibit))
+	    { /* slot used */
+
+	      if(!(dmask & (1<<ibit)))
+		{ /* No block ready yet. */
+		  
+		  id = fa125ID[ii];
+		  
+		  stat = (vmeRead32(&fa125p[id]->main.blockCSR)
+			  & FA125_BLOCKCSR_BLOCK_READY)>>2;
+		  
+		  dmask |= (1<<id);
+
+		  if(dmask == slotmask)
+		    { /* Blockready mask matches user slotmask */
+		      FA125UNLOCK;
+		      return(dmask);
+		    }
+		}
+	    }
+	}
+    }
+  FA125UNLOCK;
+  
+  return(dmask);
+}
+
+
+
+/**
  *  @ingroup Status
  *  @brief Return the vme slot mask of all initialized fADC125s
  *  @return VME Slot mask, otherwise ERROR.

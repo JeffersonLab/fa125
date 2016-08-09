@@ -494,6 +494,7 @@ int  fa125PPGEnable(int id);
 int  fa125PPGDisable(int id);
 int  fa125Bready(int id);
 unsigned int fa125GBready();
+unsigned int fa125GBlockReady(unsigned int slotmask, int nloop);
 unsigned int fa125ScanMask();
 int  fa125ReadBlockStatus(int pflag);
 int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
