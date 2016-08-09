@@ -3358,8 +3358,9 @@ fa125GBlockReady(unsigned int slotmask, int nloop)
 		  
 		  stat = (vmeRead32(&fa125p[id]->main.blockCSR)
 			  & FA125_BLOCKCSR_BLOCK_READY)>>2;
-		  
-		  dmask |= (1<<id);
+
+		  if(stat)
+		    dmask |= (1<<id);
 
 		  if(dmask == slotmask)
 		    { /* Blockready mask matches user slotmask */
