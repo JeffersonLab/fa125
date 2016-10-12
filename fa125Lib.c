@@ -372,8 +372,8 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
     }
 
   /* Determine the clock, sync, trigger configuration */
-  /* Sync Reset */
-  srSrc = (iFlag&0x1);
+  /* Sync Reset (only VXS available, ignore) */
+  srSrc = 1;
 
   /* Trigger */
   trigSrc = (iFlag&0x6)>>1;
@@ -744,11 +744,11 @@ fa125Status(int id, int pflag)
 
   /* SYNCRESET */
   printf(" SyncReset Source      :");
-  srsrc = (p.ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2;
-  if(srsrc == FA125_PROC_CTRL2_SYNCRESET_P0)
+  srsrc = (f[0].test & FA125_FE_TEST_SYNCRESET_ENABLE)>>2;
+  if(srsrc)
     printf(" P0 (VXS)\n");
-  else if (srsrc == FA125_PROC_CTRL2_SYNCRESET_VME)
-    printf(" VME (software)\n");
+  else
+    printf(" DISABLED\n");
 
   printf("\n");
 
@@ -958,12 +958,10 @@ fa125GStatus(int pflag)
 	     ==FA125_TRIGSRC_TRIGGER_P2 ? "  P2 " :
 	     " ??? ");
 
+      // FIXME: Just check enable bit... disabled or VXS
       printf("%s     ",
-	     (p[id].ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
-	     == FA125_PROC_CTRL2_SYNCRESET_P0 ? " VXS " :
-	     (p[id].ctrl2 & FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK)>>2
-	     == FA125_PROC_CTRL2_SYNCRESET_VME? " VME " :
-	     " ??? ");
+	     (f[id].test & FA125_FE_TEST_SYNCRESET_ENABLE)>>2
+	     == 1 ? " VXS " : " OFF ");
 
       printf("%s ",
 	     (m[id].ctrl1 & FA125_CTRL1_ENABLE_MULTIBLOCK) ? "YES":" NO");
@@ -2562,8 +2560,8 @@ fa125GetTriggerSource(int id)
  *  @brief Set the Sync Reset source for the specified fADC125
  *  @param id Slot number
  *  @param srsrc Sync Reset source
- *      - 0: Software (VME)
- *      - 1: P0 (VXS)
+ *      - 0: P0 (VXS)
+ *      - 1: Software (VME)
  *  @return OK if successful, otherwise ERROR.
  */
 int
@@ -2584,23 +2582,11 @@ fa125SetSyncResetSource(int id, int srsrc)
       return ERROR;
     }
 
-  switch(srsrc)
-    {
-    case 1: /* VME (software) */
-      srsrc = FA125_PROC_CTRL2_SYNCRESET_VME;
-      break;
-
-    case 0: /* VXS (P0) */
-    default:
-      srsrc = FA125_PROC_CTRL2_SYNCRESET_P0;
-      break;
-    }
+  if(srsrc)
+    printf("\n%s: WARN: VME SyncReset Source no longer supported. Setting to VXS.\n\n",
+	   __FUNCTION__);
 
   FA125LOCK;
-  /* Set source */
-  vmeWrite32(&fa125p[id]->proc.ctrl2, 
-	     (vmeRead32(&fa125p[id]->proc.ctrl2) & ~FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK) | 
-	     srsrc);
   /* Enable */
   vmeWrite32(&fa125p[id]->fe[0].test,
 	     (vmeRead32(&fa125p[id]->fe[0].test) & ~FA125_FE_TEST_SYNCRESET_ENABLE) |
@@ -3338,41 +3324,37 @@ fa125GBready()
 unsigned int
 fa125GBlockReady(unsigned int slotmask, int nloop)
 {
-  int iloop, ibit, id, stat=0;
-  unsigned int dmask=0;
+  int iloop, id, stat=0;
+  unsigned int scanmask = 0, dmask=0;
 
+  scanmask = fa125ScanMask();
+  
   FA125LOCK;
   for(iloop = 0; iloop < nloop; iloop++)
-    {
+    { /* Loop for user specified number of times */
 
-      for(ibit = 0; ibit < 21; ibit++) 
+      for(id = 2; id < 21; id++)  /* Scan over physical slots */
 	{
-
-	  if(slotmask & (1<<ibit))
-	    { /* slot used */
-
-	      if(!(dmask & (1<<ibit)))
-		{ /* No block ready yet. */
-		  
-		  id = fa125ID[ii];
-		  
-		  stat = (vmeRead32(&fa125p[id]->main.blockCSR)
-			  & FA125_BLOCKCSR_BLOCK_READY)>>2;
-
-		  if(stat)
-		    dmask |= (1<<id);
-
-		  if(dmask == slotmask)
-		    { /* Blockready mask matches user slotmask */
-		      FA125UNLOCK;
-		      return(dmask);
-		    }
+	  if( (scanmask & (1<<id))      /* Module initialized */
+	      && (slotmask & (1<<id))   /* slot used */
+	      && (!(dmask & (1<<id))) ) /* No block ready yet. */
+	    { 
+	      stat = (vmeRead32(&fa125p[id]->main.blockCSR)
+		      & FA125_BLOCKCSR_BLOCK_READY)>>2;
+	      
+	      if(stat)
+		dmask |= (1<<id);
+		      
+	      if(dmask == slotmask)
+		{ /* Blockready mask matches user slotmask */
+		  FA125UNLOCK;
+		  return(dmask);
 		}
 	    }
 	}
     }
   FA125UNLOCK;
-  
+      
   return(dmask);
 }
 
@@ -3684,6 +3666,66 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 
   FA125UNLOCK;
   return(OK);
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Enable/Disable suppression of one or both of the trigger time words
+ *    in the data stream.
+ *  @param id Slot number
+ *  @param suppress Suppression Flag
+ *      -  0: Trigger time words are enabled in datastream
+ *      -  1: Suppress BOTH trigger time words
+ *  @return OK if successful, otherwise ERROR.
+ */
+int  
+fa125DataSuppressTriggerTime(int id, int suppress)
+{
+  int val = 0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",
+	     __FUNCTION__, id);
+      return(ERROR);
+    }
+
+  if((suppress < 0) || (suppress > 1))
+    {
+      printf("\n%s: ERROR: Invalid suppress value (%d)\n\n",
+	     __FUNCTION__, suppress);
+      return ERROR;
+    }
+
+  if(suppress)
+    val = 0;
+  else
+    val = FA125_PROC_CTRL2_TRIGTIME_ENABLE;
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->proc.ctrl2, val); 
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Enable/Disable suppression of one or both of the trigger time words
+ *    in the data stream for all initialized modules.
+ *  @param suppress Suppression Flag
+ *      -  0: Trigger time words are enabled in datastream
+ *      -  1: Suppress BOTH trigger time words
+ */
+void 
+fa125GDataSuppressTriggerTime(int suppress)
+{
+  int ifa;
+
+  for(ifa = 0; ifa < nfa125; ifa++)
+    fa125DataSuppressTriggerTime(fa125Slot(ifa), suppress);
+
 }
 
 struct data_struct 
