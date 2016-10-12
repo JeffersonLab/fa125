@@ -114,9 +114,9 @@ struct fa125_a32
 
 #define FA125_ID                   0xADC12500
 
-#define FA125_MAIN_SUPPORTED_FIRMWARE   0x0002000F
-#define FA125_PROC_SUPPORTED_FIRMWARE   0x0002000F
-#define FA125_FE_SUPPORTED_FIRMWARE     0x0002000F
+#define FA125_MAIN_SUPPORTED_FIRMWARE   0x00020010
+#define FA125_PROC_SUPPORTED_FIRMWARE   0x00020010
+#define FA125_FE_SUPPORTED_FIRMWARE     0x00020010
 
 /* 0x10 pwrctl register definitions */
 #define FA125_PWRCTL_KEY_ON        0x3000ABCD
@@ -249,10 +249,13 @@ struct fa125_a32
 #define FA125_TRIGSRC_TRIGGER_P2             ((1<<1)|(1<<0))
 
 /* 0xD00C proc ctrl2 register definitions */
-#define FA125_PROC_CTRL2_TRIGGER_ENABLE        (1<<0)
-#define FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK 0xC
-#define FA125_PROC_CTRL2_SYNCRESET_P0          (0<<2)
-#define FA125_PROC_CTRL2_SYNCRESET_VME         (2<<2)
+#define FA125_PROC_CTRL2_TRIGTIME_ENABLE  (1<<2)
+
+// FIXME: Just remove these comments
+/* #define FA125_PROC_CTRL2_TRIGGER_ENABLE        (1<<0) */
+/* #define FA125_PROC_CTRL2_SYNCRESET_SOURCE_MASK 0xC */
+/* #define FA125_PROC_CTRL2_SYNCRESET_P0          (0<<2) */
+/* #define FA125_PROC_CTRL2_SYNCRESET_VME         (2<<2) */
 
 /* 0xD014 proc blocklevel register definitions */
 #define FA125_PROC_BLOCKLEVEL_MASK    0x0000FFFF
@@ -494,9 +497,12 @@ int  fa125PPGEnable(int id);
 int  fa125PPGDisable(int id);
 int  fa125Bready(int id);
 unsigned int fa125GBready();
+unsigned int fa125GBlockReady(unsigned int slotmask, int nloop);
 unsigned int fa125ScanMask();
 int  fa125ReadBlockStatus(int pflag);
 int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
+int  fa125DataSuppressTriggerTime(int id, int suppress);
+void fa125GDataSuppressTriggerTime(int suppress);
 void fa125DecodeData(unsigned int data);
 
 /*  Firmware Updating Routine Prototypes */
