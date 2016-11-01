@@ -492,40 +492,34 @@ fa125CheckAddresses(int id)
   unsigned int offset=0, expected=0;
   unsigned long base=0;
   int ife=0;
+  struct fa125_a24 fadcp;
 
-  if(id==0) id=fa125ID[0];
-  if((id<=0) || (id>21) || (fa125p[id]==NULL))
-    {
-      printf("\n%s: ERROR: FA125 in slot %d not initialized\n\n",__FUNCTION__,id);
-      return;
-    }
-  
   printf("%s:\n\t ---------- Checking FA125 address space ---------- \n",__FUNCTION__);
 
-  base = (unsigned long) &fa125p[id]->main;
+  base = (unsigned long) &fadcp.main;
 
   for(ife=0; ife<12; ife++)
     {
-      offset = ((unsigned long) &fa125p[id]->fe[ife]) - base;
+      offset = ((unsigned long) &fadcp.fe[ife]) - base;
       expected = 0x1000 + ife*0x1000;
       if(offset != expected)
 	printf("\n%s: ERROR fa125p[%d]->fe[%d] not at offset = 0x%x (@ 0x%x)\n\n",
 	       __FUNCTION__,id,ife,expected,offset);
     }
 
-  offset = ((unsigned long) &fa125p[id]->fe[0].ie) - base;
+  offset = ((unsigned long) &fadcp.fe[0].ie) - base;
   expected = 0x10b0;
   if(offset != expected)
     printf("\n%s: ERROR fa125p[%d]->fe[0].ie not at offset = 0x%x (@ 0x%x)\n\n",
 	   __FUNCTION__,id,expected,offset);
 
-  offset = ((unsigned long) &fa125p[id]->proc) - base;
+  offset = ((unsigned long) &fadcp.proc) - base;
   expected = 0xD000;
   if(offset != expected)
     printf("\n%s: ERROR fa125p[%d]->proc not at offset = 0x%x (@ 0x%x)\n\n",
 	   __FUNCTION__,id,expected,offset);
 
-  offset = ((unsigned long) &fa125p[id]->proc.trigsrc) - base;
+  offset = ((unsigned long) &fadcp.proc.trigsrc) - base;
   expected = 0xD008;
   if(offset != expected)
     printf("\n%s: ERROR fa125p[%d]->proc.trigsrc not at offset = 0x%x (@ 0x%x)\n\n",

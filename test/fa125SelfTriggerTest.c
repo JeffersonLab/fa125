@@ -14,10 +14,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/prctl.h>
+#include <sys/signal.h>
 #include "jvme.h"
 #include "fa125Lib.h"
 #include "tiLib.h"
 
+void closeup();
+void sig_handler(int signo);
 static void fa125StartPollingThread(void);
 void myISR(int arg);
 
@@ -25,6 +28,11 @@ DMA_MEM_ID vmeIN,vmeOUT;
 extern DMANODE *the_event;
 extern unsigned int *dma_dabufp;
 extern int nfa125;
+
+pthread_attr_t fa125pollthread_attr;
+pthread_t      fa125pollthread;
+int fa125IntCount=0;
+
 
 #define DO_READOUT
 
@@ -39,6 +47,8 @@ main(int argc, char *argv[])
 
   printf("\nFA125 Self Triggering Test\n");
   printf("----------------------------\n");
+
+  signal(SIGINT,sig_handler);
 
   vmeOpenDefaultWindows();
     
@@ -147,6 +157,19 @@ main(int argc, char *argv[])
   printf("Hit any key to Disable polling and exit.\n");
   getchar();
 
+  vmeBusLock();
+  void *res;
+
+  if(pthread_cancel(fa125pollthread)<0) 
+    perror("pthread_cancel");
+  if(pthread_join(fa125pollthread,&res)<0)
+    perror("pthread_join");
+  if (res == PTHREAD_CANCELED)
+    printf("%s: Polling thread canceled\n",__FUNCTION__);
+  else
+    printf("%s: ERROR: Polling thread NOT canceled\n",__FUNCTION__);
+
+  vmeBusUnlock();
 
   for(iadc=0; iadc<nfa125; iadc++)
     {
@@ -159,14 +182,11 @@ main(int argc, char *argv[])
 
  CLOSE:
 
+  dmaPFreeAll();
   vmeCloseDefaultWindows();
 
   exit(0);
 }
-
-pthread_attr_t fa125pollthread_attr;
-pthread_t      fa125pollthread;
-int fa125IntCount=0;
 
 static void
 FA125Poll(void)
@@ -204,12 +224,12 @@ FA125Poll(void)
 
       if(fa125data)
 	{
-	  INTLOCK; 
+	  vmeBusLock(); 
 	  fa125IntCount++;
 
 	  myISR(0);
 
-	  INTUNLOCK;
+	  vmeBusUnlock();
 	}
     
     }
@@ -287,4 +307,23 @@ myISR(int arg)
 
   if(fa125IntCount%1000==0)
     printf("intCount = %d\n",fa125IntCount );
+}
+
+void sig_handler(int signo)
+{
+  int i, status;
+
+  switch (signo) {
+  case SIGINT:
+    printf("\n\n");
+    closeup();
+    exit(1);  /* exit if CRTL/C is issued */
+  }
+  return;
+}
+
+void closeup()
+{
+  dmaPFreeAll();
+  vmeCloseDefaultWindows();
 }
