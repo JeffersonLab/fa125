@@ -3586,6 +3586,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 		     csr,xferCount,id,0,0,0);
 	      FA125UNLOCK;
 	      fa125BlockError=FA125_BLOCKERROR_UNKNOWN_BUS_ERROR;
+	      if(rmode == 2)
+		fa125GetTokenStatus(1);
+	  
 	      return(xferCount);
 	    }
 	} 
@@ -3599,6 +3602,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	  fa125BlockError=FA125_BLOCKERROR_ZERO_WORD_COUNT;
 #endif
 	  FA125UNLOCK;
+	  if(rmode == 2)
+	    fa125GetTokenStatus(1);
+	  
 	  return(nwrds);
 	} 
       else 
@@ -3610,6 +3616,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 #endif
 	  FA125UNLOCK;
 	  fa125BlockError=FA125_BLOCKERROR_DMADONE_ERROR;
+	  if(rmode == 2)
+	    fa125GetTokenStatus(1);
+	  
 	  return(retVal>>2);
 	}
 
