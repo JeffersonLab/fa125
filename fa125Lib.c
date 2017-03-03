@@ -2874,6 +2874,40 @@ fa125GetTokenMask()
 }
 
 /**
+ * @ingroup Status
+ *  @brief Return slot mask of modules with token
+ *  @param pflag Option to print status to standard out.
+ *  @return Mask of slots with the token, if successful. Otherwise ERROR.
+ */
+
+unsigned int
+fa125GetTokenStatus(int pflag)
+{
+  unsigned int rval = 0;
+  int ifa = 0;
+  
+  if(pflag)
+    logMsg("fa125GetTokenStatus: Token in slot(s) ",1,2,3,4,5,6);
+
+  rval = fa125GetTokenMask();
+  
+  if(pflag)
+    {
+      for(ifa = 0; ifa < nfa125; ifa++)
+	{
+	  if(rval & (1<<fa125ID[ifa]))
+	    logMsg("%2d ", fa125ID[ifa], 2, 3, 4, 5, 6);
+	}
+    }
+  
+  if(pflag)
+    logMsg("\n", 1, 2, 3, 4, 5, 6);
+
+  return rval;
+}
+
+
+/**
  *  @ingroup Config
  *  @brief Set the number of events in the block
  *  @param id Slot number
@@ -3552,6 +3586,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 		     csr,xferCount,id,0,0,0);
 	      FA125UNLOCK;
 	      fa125BlockError=FA125_BLOCKERROR_UNKNOWN_BUS_ERROR;
+	      if(rmode == 2)
+		fa125GetTokenStatus(1);
+	  
 	      return(xferCount);
 	    }
 	} 
@@ -3565,6 +3602,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	  fa125BlockError=FA125_BLOCKERROR_ZERO_WORD_COUNT;
 #endif
 	  FA125UNLOCK;
+	  if(rmode == 2)
+	    fa125GetTokenStatus(1);
+	  
 	  return(nwrds);
 	} 
       else 
@@ -3576,6 +3616,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 #endif
 	  FA125UNLOCK;
 	  fa125BlockError=FA125_BLOCKERROR_DMADONE_ERROR;
+	  if(rmode == 2)
+	    fa125GetTokenStatus(1);
+	  
 	  return(retVal>>2);
 	}
 
@@ -3721,6 +3764,59 @@ fa125GDataSuppressTriggerTime(int suppress)
     fa125DataSuppressTriggerTime(fa125Slot(ifa), suppress);
 
 }
+
+/**
+ * @ingroup Status
+ *  @brief Return the base address of the A32 for specified module
+ *  @param id 
+ *   - Slot Number
+ *  @return A32 address base, if successful. Otherwise ERROR.
+ */
+
+unsigned int
+fa125GetA32(int id)
+{
+  unsigned int rval = 0;
+  if(fa125pd[id])
+    {
+      rval = (unsigned int)fa125pd[id] - fa125A32Offset;
+    }
+  else
+    {
+      logMsg("fa125GetA32(%d): A32 pointer not initialized\n",
+	     id, 2, 3, 4, 5, 6);
+      rval = ERROR;
+    }
+
+  return rval;
+}
+
+/**
+ * @ingroup Status
+ *  @brief Return the base address of the A32 Multiblock
+ *  @return A32 multiblock address base, if successful. Otherwise ERROR.
+ */
+
+unsigned int
+fa125GetA32M()
+{
+  unsigned int rval = 0;
+  if(FA125pmb)
+    {
+      rval = (unsigned int)FA125pmb - fa125A32Offset;
+    }
+  else
+    {
+      logMsg("fa125GetA32M: A32M pointer not initialized\n",
+	     1, 2, 3, 4, 5, 6);
+      rval = ERROR;
+    }
+
+  return rval;
+}
+
+
+
 
 struct data_struct 
 {

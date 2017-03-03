@@ -1,114 +1,129 @@
-#-----------------------------------------------------------------------------
-#  Copyright (c) 2010 Southeastern Universities Research Association,
-#                          Continuous Electron Beam Accelerator Facility
-# 
-#  This software was developed under a United States Government license
-#  described in the NOTICE file included as part of this distribution.
-# 
-#  CEBAF Data Acquisition Group, 12000 Jefferson Ave., Newport News, VA 23606
-#  Email: coda@cebaf.gov  Tel: (804) 249-7101  Fax: (804) 249-7363
-# -----------------------------------------------------------------------------
-#  
-#  Description:  Makefile for Flash ADC-125.
-# 	
-# 	
-#  Author:  Bryan Moffit, TJANF Data Acquisition Group
-# 
-#  __DATE__:
 #
-DEBUG=1
+# File:
+#    Makefile
+#
+# Description:
+#    Makefile for fADC125
+#
+#
+BASENAME=fa125
+#
+# Uncomment DEBUG line, to include some debugging info ( -g and -Wall)
+DEBUG	?= 1
+QUIET	?= 1
+#
+ifeq ($(QUIET),1)
+        Q = @
+else
+        Q =
+endif
 
-ifndef ARCH
-	ifdef LINUXVME_LIB
-		ARCH=Linux
-	else
-		ARCH=VXWORKSPPC
-	endif
+# Override some bad habit of mismatching the ARCH with the OS.
+ifeq (Linux, $(findstring Linux, ${ARCH}))
+	override ARCH=$(shell uname -m)
+	OS=LINUX
+endif
+
+ifeq (VXWORKS, $(findstring VXWORKS, $(ARCH)))
+	override ARCH=PPC
+	OS=VXWORKS
 endif
 
 
+ifndef ARCH
+	ifeq (arm, $(findstring arm, ${MACHTYPE}))
+		ARCH=armv71
+		OS=LINUX
+	else
+		ifdef LINUXVME_LIB
+			ARCH=$(shell uname -m)
+			OS=LINUX
+		else
+			ARCH=PPC
+			OS=VXWORKS
+		endif
+	endif
+endif
+
 # Defs and build for VxWorks
-ifeq ($(ARCH),VXWORKSPPC)
-
-VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
-
-# This should be replaced with whichever directories contain jvme.h, tiLib.h, tsLib.h..
+ifeq (${OS}, VXWORKS)
+VXWORKS_ROOT		?= /site/vxworks/5.5/ppc/target
 VME_INCLUDE             ?= -I$(LINUXVME_INC)
 
 CC			= ccppc
 LD			= ldppc
 DEFS			= -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall \
 				-fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
-INCS			= -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net \
-			 $(VME_INCLUDE)
+INCS			= -I. -I$(VXWORKS_ROOT)/h  \
+				$(VME_INCLUDE)
 CFLAGS			= $(INCS) $(DEFS)
 
-# explicit targets
-
-all: fa125Lib.o
-
-clean:
-	rm -f fa125Lib.o
-
-fa125Lib.o: fa125Lib.c fa125Lib.h
-	@echo "Building $@ from $<"
-	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
-
-endif
+endif #OS=VXWORKS#
 
 # Defs and build for Linux
-ifeq ($(ARCH),Linux)
+ifeq ($(OS),LINUX)
+LINUXVME_LIB		?= ../lib
+LINUXVME_INC		?= ../include
 
-LINUXVME_LIB		?= ${CODA}/linuxvme/lib
-LINUXVME_INC		?= ${CODA}/linuxvme/include
-
-CROSS_COMPILE           = 
-CC			= $(CROSS_COMPILE)gcc
+CC			= gcc
+ifeq ($(ARCH),i686)
+CC			+= -m32
+endif
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -L. -L${LINUXVME_LIB} 
+CFLAGS			= -L. -L${LINUXVME_LIB}
 INCS			= -I. -I${LINUXVME_INC} 
+
+LIBS			= lib${BASENAME}.a lib${BASENAME}.so
+endif #OS=LINUX#
 
 ifdef DEBUG
 CFLAGS			+= -Wall -g
 else
-			+= -O2
+CFLAGS			+= -O2
+endif
+SRC			= ${BASENAME}Lib.c
+HDRS			= $(SRC:.c=.h)
+OBJ			= ${BASENAME}Lib.o
+DEPS			= $(SRC:.c=.d)
+
+ifeq ($(OS),LINUX)
+all: echoarch ${LIBS}
+else
+all: echoarch $(OBJ)
 endif
 
-OBJS			= fa125Lib.o
-DEPS			= fa125Lib.d
+%.o: %.c
+	@echo " CC     $@"
+	${Q}$(CC) $(CFLAGS) $(INCS) -c -o $@ $(SRC)
 
-LIBS			= libfa125.a
+%.so: $(SRC)
+	@echo " CC     $@"
+	${Q}$(CC) -fpic -shared $(CFLAGS) $(INCS) -o $(@:%.a=%.so) $(SRC)
 
-all: $(LIBS)
+%.a: $(SRC)
+	@echo " AR     $@"
+	${Q}$(AR) ru $@ $<
+	@echo " RANLIB $@"
+	${Q}$(RANLIB) $@
 
-fa125Lib.o: fa125Lib.c 
-	@echo "Building $@ from $<"
-	$(CC) -c $(CFLAGS) $(INCS) -o $@ fa125Lib.c
+ifeq ($(OS),LINUX)
+links: $(LIBS)
+	@echo " LN     $<"
+	${Q}ln -sf $(PWD)/$< $(LINUXVME_LIB)/$<
+	${Q}ln -sf $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
+	${Q}ln -sf ${PWD}/*Lib.h $(LINUXVME_INC)
 
-libfa125.a: fa125Lib.o
-	$(CC) -fpic -shared $(CFLAGS) $(INCS) -o libfa125.so fa125Lib.c
-	$(AR) ruv libfa125.a fa125Lib.o
-	$(RANLIB) libfa125.a
-
-clean distclean:
-	@rm -f $(OBJS) $(LIBS) $(DEPS) *.so *~
-
-links: libfa125.a
-	ln -sf $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
-	ln -sf $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
-	ln -sf $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
-
-install: libfa125.a
-	@cp -v $(PWD)/libfa125.a $(LINUXVME_LIB)/libfa125.a
-	@cp -v $(PWD)/libfa125.so $(LINUXVME_LIB)/libfa125.so
-	@cp -v $(PWD)/fa125Lib.h $(LINUXVME_INC)/fa125Lib.h
-
-%: %.c libfa125.a
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) $(LIBS_$@) -lrt -ljvme -lfa125
+install: $(LIBS)
+	@echo " CP     $<"
+	${Q}cp $(PWD)/$< $(LINUXVME_LIB)/$<
+	@echo " CP     $(<:%.a=%.so)"
+	${Q}cp $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
+	@echo " CP     ${BASENAME}Lib.h"
+	${Q}cp ${PWD}/${BASENAME}Lib.h $(LINUXVME_INC)
 
 %.d: %.c
-	@echo "Building $@ from $<"
+	@echo " DEP    $@"
 	@set -e; rm -f $@; \
 	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
 	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
@@ -116,6 +131,12 @@ install: libfa125.a
 
 -include $(DEPS)
 
-.PHONY: all clean distclean
-
 endif
+
+clean:
+	@rm -vf ${BASENAME}Lib.{o,d} lib${BASENAME}.{a,so}
+
+echoarch:
+	@echo "Make for $(OS)-$(ARCH)"
+
+.PHONY: clean echoarch

@@ -484,6 +484,7 @@ int  fa125Reset(int id, int reset);
 int  fa125ResetCounters(int id);
 int  fa125ResetToken(int id);
 int  fa125GetTokenMask();
+unsigned int fa125GetTokenStatus(int pflag);
 int  fa125SetBlocklevel(int id, int blocklevel);
 int  fa125SetNTrigBusy(int id, int ntrig);
 int  fa125GSetNTrigBusy(int ntrig);
@@ -503,6 +504,9 @@ int  fa125ReadBlockStatus(int pflag);
 int  fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag);
 int  fa125DataSuppressTriggerTime(int id, int suppress);
 void fa125GDataSuppressTriggerTime(int suppress);
+unsigned int fa125GetA32(int id);
+unsigned int fa125GetA32M();
+
 void fa125DecodeData(unsigned int data);
 
 /*  Firmware Updating Routine Prototypes */
