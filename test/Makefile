@@ -24,7 +24,7 @@ RANLIB                  = ranlib
 CFLAGS			= -Wall -g -O2 -I${LINUXVME_INC} -I. -I/usr/include \
 			  -L${LINUXVME_LIB} -L.
 
-PROGS			= fa125LibTest
+PROGS			= fa125LibTest fa125SelfTriggerTest
 
 
 all: $(PROGS)

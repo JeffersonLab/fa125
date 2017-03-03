@@ -29,6 +29,11 @@ main(int argc, char *argv[])
   printf("\nFA125 Library Tests\n");
   printf("----------------------------\n");
 
+
+  fa125CheckAddresses(0);
+
+  exit(0);
+
   vmeOpenDefaultWindows();
 
 

@@ -492,40 +492,34 @@ fa125CheckAddresses(int id)
   unsigned int offset=0, expected=0;
   unsigned long base=0;
   int ife=0;
+  struct fa125_a24 fadcp;
 
-  if(id==0) id=fa125ID[0];
-  if((id<=0) || (id>21) || (fa125p[id]==NULL))
-    {
-      printf("\n%s: ERROR: FA125 in slot %d not initialized\n\n",__FUNCTION__,id);
-      return;
-    }
-  
   printf("%s:\n\t ---------- Checking FA125 address space ---------- \n",__FUNCTION__);
 
-  base = (unsigned long) &fa125p[id]->main;
+  base = (unsigned long) &fadcp.main;
 
   for(ife=0; ife<12; ife++)
     {
-      offset = ((unsigned long) &fa125p[id]->fe[ife]) - base;
+      offset = ((unsigned long) &fadcp.fe[ife]) - base;
       expected = 0x1000 + ife*0x1000;
       if(offset != expected)
 	printf("\n%s: ERROR fa125p[%d]->fe[%d] not at offset = 0x%x (@ 0x%x)\n\n",
 	       __FUNCTION__,id,ife,expected,offset);
     }
 
-  offset = ((unsigned long) &fa125p[id]->fe[0].ie) - base;
+  offset = ((unsigned long) &fadcp.fe[0].ie) - base;
   expected = 0x10b0;
   if(offset != expected)
     printf("\n%s: ERROR fa125p[%d]->fe[0].ie not at offset = 0x%x (@ 0x%x)\n\n",
 	   __FUNCTION__,id,expected,offset);
 
-  offset = ((unsigned long) &fa125p[id]->proc) - base;
+  offset = ((unsigned long) &fadcp.proc) - base;
   expected = 0xD000;
   if(offset != expected)
     printf("\n%s: ERROR fa125p[%d]->proc not at offset = 0x%x (@ 0x%x)\n\n",
 	   __FUNCTION__,id,expected,offset);
 
-  offset = ((unsigned long) &fa125p[id]->proc.trigsrc) - base;
+  offset = ((unsigned long) &fadcp.proc.trigsrc) - base;
   expected = 0xD008;
   if(offset != expected)
     printf("\n%s: ERROR fa125p[%d]->proc.trigsrc not at offset = 0x%x (@ 0x%x)\n\n",
@@ -2880,6 +2874,40 @@ fa125GetTokenMask()
 }
 
 /**
+ * @ingroup Status
+ *  @brief Return slot mask of modules with token
+ *  @param pflag Option to print status to standard out.
+ *  @return Mask of slots with the token, if successful. Otherwise ERROR.
+ */
+
+unsigned int
+fa125GetTokenStatus(int pflag)
+{
+  unsigned int rval = 0;
+  int ifa = 0;
+  
+  if(pflag)
+    logMsg("fa125GetTokenStatus: Token in slot(s) ",1,2,3,4,5,6);
+
+  rval = fa125GetTokenMask();
+  
+  if(pflag)
+    {
+      for(ifa = 0; ifa < nfa125; ifa++)
+	{
+	  if(rval & (1<<fa125ID[ifa]))
+	    logMsg("%2d ", fa125ID[ifa], 2, 3, 4, 5, 6);
+	}
+    }
+  
+  if(pflag)
+    logMsg("\n", 1, 2, 3, 4, 5, 6);
+
+  return rval;
+}
+
+
+/**
  *  @ingroup Config
  *  @brief Set the number of events in the block
  *  @param id Slot number
@@ -3558,6 +3586,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 		     csr,xferCount,id,0,0,0);
 	      FA125UNLOCK;
 	      fa125BlockError=FA125_BLOCKERROR_UNKNOWN_BUS_ERROR;
+	      if(rmode == 2)
+		fa125GetTokenStatus(1);
+	  
 	      return(xferCount);
 	    }
 	} 
@@ -3571,6 +3602,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 	  fa125BlockError=FA125_BLOCKERROR_ZERO_WORD_COUNT;
 #endif
 	  FA125UNLOCK;
+	  if(rmode == 2)
+	    fa125GetTokenStatus(1);
+	  
 	  return(nwrds);
 	} 
       else 
@@ -3582,6 +3616,9 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 #endif
 	  FA125UNLOCK;
 	  fa125BlockError=FA125_BLOCKERROR_DMADONE_ERROR;
+	  if(rmode == 2)
+	    fa125GetTokenStatus(1);
+	  
 	  return(retVal>>2);
 	}
 
@@ -3727,6 +3764,59 @@ fa125GDataSuppressTriggerTime(int suppress)
     fa125DataSuppressTriggerTime(fa125Slot(ifa), suppress);
 
 }
+
+/**
+ * @ingroup Status
+ *  @brief Return the base address of the A32 for specified module
+ *  @param id 
+ *   - Slot Number
+ *  @return A32 address base, if successful. Otherwise ERROR.
+ */
+
+unsigned int
+fa125GetA32(int id)
+{
+  unsigned int rval = 0;
+  if(fa125pd[id])
+    {
+      rval = (unsigned int)fa125pd[id] - fa125A32Offset;
+    }
+  else
+    {
+      logMsg("fa125GetA32(%d): A32 pointer not initialized\n",
+	     id, 2, 3, 4, 5, 6);
+      rval = ERROR;
+    }
+
+  return rval;
+}
+
+/**
+ * @ingroup Status
+ *  @brief Return the base address of the A32 Multiblock
+ *  @return A32 multiblock address base, if successful. Otherwise ERROR.
+ */
+
+unsigned int
+fa125GetA32M()
+{
+  unsigned int rval = 0;
+  if(FA125pmb)
+    {
+      rval = (unsigned int)FA125pmb - fa125A32Offset;
+    }
+  else
+    {
+      logMsg("fa125GetA32M: A32M pointer not initialized\n",
+	     1, 2, 3, 4, 5, 6);
+      rval = ERROR;
+    }
+
+  return rval;
+}
+
+
+
 
 struct data_struct 
 {
