@@ -2058,6 +2058,47 @@ fa125SetThreshold(int id, unsigned short chan, unsigned short tvalue)
 
 /**
  *  @ingroup Config
+ *  @brief Set the self trigger threshold for a specific fADC125 Channel.
+ *  @param id Slot number
+ *  @param chan Channel Number [1,6]
+ *  @param tvalue Threshold Value [0,4095]
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SetSelfTriggerThreshold(int id, unsigned short chan, unsigned short tvalue)
+{
+  if(id==0) id=fa125ID[0];
+
+  if((id<=0) || (id>21) || (fa125p[id] == NULL)) 
+    {
+      logMsg("\nfa125SetSelfTriggerThreshold: ERROR : FA125 in slot %d is not initialized \n\n",id,0,0,0,0,0);
+      return(ERROR);
+    }
+
+  if((chan > 6) || (chan < 1))
+  {
+      logMsg("\nfa125SetSelfTriggerThreshold: ERROR: Invalid channel (%d). Must be 1-6\n\n",
+	     chan,2,3,4,5,6);
+      return ERROR;
+    }
+  
+  if(tvalue>FA125_FE_SELFTRIG_THRES_MASK)
+    {
+      logMsg("\nfa125SetSelfTriggerThreshold: ERROR: Invalid threshold (%d). Must be <= %d \n\n",
+	     tvalue,FA125_MAX_HIGH_HTH,3,4,5,6);
+      return ERROR;
+    }
+  
+
+  FA125LOCK;
+  vmeWrite32(&fa125p[id]->fe[chan/6].selftrig_thres[chan%6],tvalue);
+  FA125UNLOCK;
+
+  return(OK);
+}
+
+/**
+ *  @ingroup Config
  *  @brief Disable a specific fADC125 Channel.
  *  @param id Slot number
  *  @param chan Channel Number
