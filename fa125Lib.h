@@ -77,7 +77,9 @@ struct fa125_a24_fe
   /* 0xN0A4 */ volatile UINT32 timing_thres_lo[3];
   /* 0xN0B0 */ volatile UINT32 ie;
   /* 0xN0B4 */ volatile UINT32 timing_thres_hi[2];
-  /* 0xN0BC */          UINT32 blank3[(0x1000-0xBC)/4];
+  /* 0xN0BC */          UINT32 blank3;
+  /* 0xN0C0 */ volatile UINT32 selftrig_thres[6];
+  /* 0xN0D8 */          UINT32 blank4[(0x1000-0xD8)/4];
 };
 
 struct fa125_a24_proc 
@@ -194,6 +196,9 @@ struct fa125_a32
 
 /* 0xN070 - 0xN084 threshold register defintions */
 #define FA125_FE_THRESHOLD_MASK          0x00000FFF
+
+/* 0xN0C0 - selftrig_thres[6] Self Trigger Threshold Masks */
+#define FA125_FE_SELFTRIG_THRES_MASK 0x00000FFF
 
 /* 0x1088 FE config1 defintions */
 #define FA125_FE_CONFIG1_MASK            0x000000FF
@@ -461,6 +466,7 @@ int  fa125SetOffsetFromFile(int id, char *filename);
 unsigned short fa125ReadOffset(int id, int chan);
 int  fa125ReadOffsetToFile(int id, char *filename);
 int  fa125SetThreshold(int id, unsigned short chan, unsigned short tvalue);
+int  fa125SetSelfTriggerThreshold(int id, unsigned short chan, unsigned short tvalue);
 int  fa125SetChannelDisable(int id, int channel);
 int  fa125SetChannelDisableMask(int id, unsigned int cmask0, unsigned int cmask1, unsigned int cmask2);
 int  fa125SetChannelEnable(int id, int channel);

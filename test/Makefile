@@ -21,8 +21,9 @@ CROSS_COMPILE		=
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -Wall -g -O2 -I${LINUXVME_INC} -I. -I/usr/include \
-			  -L${LINUXVME_LIB} -L.
+CFLAGS			= -Wall -g -O2 \
+				-I. -I${LINUXVME_INC} \
+				-L. -L${LINUXVME_LIB}
 
 PROGS			= fa125LibTest fa125SelfTriggerTest
 
