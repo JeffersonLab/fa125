@@ -79,7 +79,7 @@ struct fa125_a24_fe
   /* 0xN0B4 */ volatile UINT32 timing_thres_hi[2];
   /* 0xN0BC */          UINT32 blank3;
   /* 0xN0C0 */ volatile UINT32 selftrig_thres[6];
-  /* 0xN0D8 */          UINT32 blank3[(0x1000-0xD8)/4];
+  /* 0xN0D8 */          UINT32 blank4[(0x1000-0xD8)/4];
 };
 
 struct fa125_a24_proc 
