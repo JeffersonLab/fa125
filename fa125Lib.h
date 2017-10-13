@@ -13,13 +13,13 @@
  *             Gerard Visser
  *             gvisser@indiana.edu
  *             Indiana University
- *                                                                            
+ *
  * __DATE__:
  *
  *----------------------------------------------------------------------------*
  *
  * Description:
- *     Driver library header for readout of the 125MSPS ADC using vxWorks 5.5 
+ *     Driver library header for readout of the 125MSPS ADC using vxWorks 5.5
  *     (or later) or Intel based single board computer
  *
  *----------------------------------------------------------------------------*/
@@ -34,7 +34,7 @@
 #define FA125_MAX_ADC_CHANNELS       72
 #define FA125_MAX_DATA_PER_CHANNEL    8
 
-struct fa125_a24_main 
+struct fa125_a24_main
 {
   /* 0x0000 */ volatile UINT32 id;
   /* 0x0004 */ volatile UINT32 swapctl;
@@ -58,7 +58,7 @@ struct fa125_a24_main
   /* 0x0060 */          UINT32 blank1[(0x1000-0x60)/4];
 };
 
-struct fa125_a24_fe 
+struct fa125_a24_fe
 {
   /* 0xN000 */ volatile UINT32 version;
   /* 0xN004 */ volatile UINT32 test;
@@ -82,7 +82,7 @@ struct fa125_a24_fe
   /* 0xN0D8 */          UINT32 blank4[(0x1000-0xD8)/4];
 };
 
-struct fa125_a24_proc 
+struct fa125_a24_proc
 {
   /* 0xD000 */ volatile UINT32 version;
   /* 0xD004 */ volatile UINT32 csr;
@@ -101,7 +101,7 @@ struct fa125_a24_proc
   /* 0xD038 */ volatile UINT32 ntrig_busy;
 };
 
-struct fa125_a24 
+struct fa125_a24
 {
   /* 0x0000 */ struct fa125_a24_main main;
   /* 0x1000 */ struct fa125_a24_fe   fe[12];
@@ -109,7 +109,7 @@ struct fa125_a24
 };
 
 
-struct fa125_a32 
+struct fa125_a32
 {
   /* 0x0000 */ volatile UINT32 data;
 };
@@ -336,7 +336,7 @@ typedef enum
     FA125_FIRMWARE_DEBUG_WAIT_FOR_READY    = (1<<2),
     FA125_FIRMWARE_DEBUG_MCS_SKIPPED_LINES = (1<<3),
     FA125_FIRMWARE_DEBUG_VERIFY_ERASE      = (1<<4),
-#ifndef VXWORKSPPC  
+#ifndef VXWORKSPPC
     FA125_FIRMWARE_DEBUG_MEASURE_TIMES     = (1<<5)
 #endif
   } FA125_FIRMWARE_DEBUG_FLAGS;
@@ -445,7 +445,7 @@ extern const char *fa125_blockerror_names[FA125_BLOCKERROR_NTYPES];
 int  fa125Init(UINT32 addr, UINT32 addr_inc, int nadc, int iFlag);
 int  fa125Status(int id, int pflag);
 void fa125GStatus(int pflag);
-int  fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW, 
+int  fa125SetProcMode(int id, char *mode, unsigned int PL, unsigned int NW,
 		      unsigned int IE, unsigned int PG, unsigned int NPK,
 		      unsigned int P1, unsigned int P2);
 int  fa125SetScaleFactors(int id, unsigned int IBIT, unsigned int ABIT, int PBIT);
