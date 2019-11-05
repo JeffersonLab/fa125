@@ -2977,6 +2977,7 @@ fa125SetBlocklevel(int id, int blocklevel)
 int
 fa125SetNTrigBusy(int id, int ntrig)
 {
+  unsigned int rval = 0;
   if(id==0) id=fa125ID[0];
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
@@ -2994,7 +2995,8 @@ fa125SetNTrigBusy(int id, int ntrig)
     }
 
   FA125LOCK;
-  vmeWrite32(&fa125p[id]->proc.ntrig_busy, ntrig);
+  rval = vmeRead32(&fa125p[id]->proc.ntrig_busy) & ~FA125_NTRIG_BUSY_MASK;
+  vmeWrite32(&fa125p[id]->proc.ntrig_busy, ntrig | rval);
   FA125UNLOCK;
 
   return OK;
@@ -3011,6 +3013,7 @@ int
 fa125GSetNTrigBusy(int ntrig)
 {
   int id=0;
+  unsigned int rval = 0;
   if((ntrig<0) || (ntrig>0xff))
     {
       printf("\n%s: ERROR: Invalid ntrig (%d).\n\n",
@@ -3020,7 +3023,10 @@ fa125GSetNTrigBusy(int ntrig)
 
   FA125LOCK;
   for(id=0; id<nfa125; id++)
-    vmeWrite32(&fa125p[fa125Slot(id)]->proc.ntrig_busy, ntrig);
+    {
+      rval = vmeRead32(&fa125p[id]->proc.ntrig_busy) & ~FA125_NTRIG_BUSY_MASK;
+      vmeWrite32(&fa125p[id]->proc.ntrig_busy, ntrig | rval);
+    }
   FA125UNLOCK;
 
   return OK;
@@ -3048,6 +3054,97 @@ fa125GetNTrigBusy(int id)
 
   FA125LOCK;
   rval = vmeRead32(&fa125p[id]->proc.ntrig_busy) & FA125_NTRIG_BUSY_MASK;
+  FA125UNLOCK;
+
+  return rval;
+}
+
+
+/**
+ *  @ingroup Config
+ *  @brief Set the limit of un-processed triggers in the trigger buffer.
+ *  @param id Slot number
+ *  @param ntrig Number of Triggers
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125SetNTrigStop(int id, int ntrig)
+{
+  unsigned int rval = 0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<0) || (id>21) || (fa125p[id] == NULL))
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",
+	     __FUNCTION__,id);
+      return ERROR;
+    }
+
+  if((ntrig<0) || (ntrig>0xff))
+    {
+      printf("\n%s: ERROR: Invalid ntrig (%d).\n\n",
+	     __FUNCTION__,ntrig);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = vmeRead32(&fa125p[id]->proc.ntrig_busy) & ~FA125_NTRIG_STOP_MASK;
+  vmeWrite32(&fa125p[id]->proc.ntrig_busy, (ntrig << 8) | rval);
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Config
+ *  @brief Set the limit of un-processed triggers in the trigger buffer.
+ *  @param ntrig Number of Triggers
+ *  @return OK if successful, otherwise ERROR.
+ */
+int
+fa125GSetNTrigStop(int ntrig)
+{
+  int id=0;
+  unsigned int rval = 0;
+  if((ntrig<0) || (ntrig>0xff))
+    {
+      printf("\n%s: ERROR: Invalid ntrig (%d).\n\n",
+	     __FUNCTION__,ntrig);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  for(id=0; id<nfa125; id++)
+    {
+      rval = vmeRead32(&fa125p[id]->proc.ntrig_busy) & ~FA125_NTRIG_STOP_MASK;
+      vmeWrite32(&fa125p[id]->proc.ntrig_busy, (ntrig << 8) | rval);
+    }
+  FA125UNLOCK;
+
+  return OK;
+}
+
+/**
+ *  @ingroup Status
+ *  @brief Get the limit of un-processed triggers in the trigger buffer.
+ *  @param id Slot number
+ *  @return Number of Triggers if successful, otherwise ERROR.
+ */
+int
+fa125GetNTrigStop(int id)
+{
+  int rval=0;
+  if(id==0) id=fa125ID[0];
+
+  if((id<0) || (id>21) || (fa125p[id] == NULL))
+    {
+      printf("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",
+	     __FUNCTION__,id);
+      return ERROR;
+    }
+
+  FA125LOCK;
+  rval = (vmeRead32(&fa125p[id]->proc.ntrig_busy) & FA125_NTRIG_STOP_MASK) >> 8;
   FA125UNLOCK;
 
   return rval;
