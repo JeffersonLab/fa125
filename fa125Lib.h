@@ -294,6 +294,7 @@ struct fa125_a32
 
 /* 0xD038 ntrig_busy register definitions */
 #define FA125_NTRIG_BUSY_MASK   0x000000FF
+#define FA125_NTRIG_STOP_MASK   0x0000FF00
 
 /* Define data types and masks */
 #define FA125_DATA_FORMAT0     (0<<13)
@@ -495,6 +496,9 @@ int  fa125SetBlocklevel(int id, int blocklevel);
 int  fa125SetNTrigBusy(int id, int ntrig);
 int  fa125GSetNTrigBusy(int ntrig);
 int  fa125GetNTrigBusy(int id);
+int  fa125SetNTrigStop(int id, int ntrig);
+int  fa125GSetNTrigStop(int ntrig);
+int  fa125GetNTrigStop(int id);
 int  fa125SoftTrigger(int id);
 int  fa125SetPulserTriggerDelay(int id, int delay);
 int  fa125SetPulserWidth(int id, int width);
