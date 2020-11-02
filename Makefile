@@ -5,7 +5,6 @@
 # Description:
 #    Makefile for fADC125
 #
-#
 BASENAME=fa125
 #
 # Uncomment DEBUG line, to include some debugging info ( -g and -Wall)
@@ -18,50 +17,40 @@ else
         Q =
 endif
 
-# Override some bad habit of mismatching the ARCH with the OS.
-ifeq (Linux, $(findstring Linux, ${ARCH}))
-	override ARCH=$(shell uname -m)
-	OS=LINUX
+ARCH	?= $(shell uname -m)
+
+# Check for CODA 3 environment
+ifdef CODA_VME
+
+INC_CODA	= -I${CODA_VME}/include
+LIB_CODA	= -L${CODA_VME_LIB}
+
 endif
 
-ifeq (VXWORKS, $(findstring VXWORKS, $(ARCH)))
-	override ARCH=PPC
-	OS=VXWORKS
-endif
-
-
-ifndef ARCH
-	ifeq (arm, $(findstring arm, ${MACHTYPE}))
-		ARCH=armv71
-		OS=LINUX
-	else
-		ifdef LINUXVME_LIB
-			ARCH=$(shell uname -m)
-			OS=LINUX
-		else
-			ARCH=PPC
-			OS=VXWORKS
-		endif
-	endif
-endif
-
-# Defs and build for VxWorks
-ifeq (${OS}, VXWORKS)
+# Defs and build for PPC using VxWorks
+ifeq (${ARCH}, PPC)
+OS			= VXWORKS
 VXWORKS_ROOT		?= /site/vxworks/5.5/ppc/target
+
+ifdef LINUXVME_INC
 VME_INCLUDE             ?= -I$(LINUXVME_INC)
+endif
 
 CC			= ccppc
 LD			= ldppc
 DEFS			= -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall \
 				-fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
 INCS			= -I. -I$(VXWORKS_ROOT)/h  \
-				$(VME_INCLUDE)
+				$(VME_INCLUDE) ${INC_CODA}
 CFLAGS			= $(INCS) $(DEFS)
+else
+OS			= LINUX
+endif
 
-endif #OS=VXWORKS#
-
-# Defs and build for Linux
+# Defs and build for i686, x86_64 Linux
 ifeq ($(OS),LINUX)
+
+# Safe defaults
 LINUXVME_LIB		?= ../lib
 LINUXVME_INC		?= ../include
 
@@ -71,8 +60,8 @@ CC			+= -m32
 endif
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -L. -L${LINUXVME_LIB}
-INCS			= -I. -I${LINUXVME_INC} 
+CFLAGS			= -L. -L${LINUXVME_LIB} ${LIB_CODA}
+INCS			= -I. -I${LINUXVME_INC} ${INC_CODA}
 
 LIBS			= lib${BASENAME}.a lib${BASENAME}.so
 endif #OS=LINUX#
@@ -101,19 +90,13 @@ endif
 	@echo " CC     $@"
 	${Q}$(CC) -fpic -shared $(CFLAGS) $(INCS) -o $(@:%.a=%.so) $(SRC)
 
-%.a: $(SRC)
+%.a: $(OBJ)
 	@echo " AR     $@"
 	${Q}$(AR) ru $@ $<
 	@echo " RANLIB $@"
 	${Q}$(RANLIB) $@
 
 ifeq ($(OS),LINUX)
-links: $(LIBS)
-	@echo " LN     $<"
-	${Q}ln -sf $(PWD)/$< $(LINUXVME_LIB)/$<
-	${Q}ln -sf $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
-	${Q}ln -sf ${PWD}/*Lib.h $(LINUXVME_INC)
-
 install: $(LIBS)
 	@echo " CP     $<"
 	${Q}cp $(PWD)/$< $(LINUXVME_LIB)/$<
@@ -121,6 +104,14 @@ install: $(LIBS)
 	${Q}cp $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
 	@echo " CP     ${BASENAME}Lib.h"
 	${Q}cp ${PWD}/${BASENAME}Lib.h $(LINUXVME_INC)
+
+coda_install: $(LIBS)
+	@echo " CODACP $<"
+	${Q}cp $(PWD)/$< $(CODA_VME_LIB)/$<
+	@echo " CODACP $(<:%.a=%.so)"
+	${Q}cp $(PWD)/$(<:%.a=%.so) $(CODA_VME_LIB)/$(<:%.a=%.so)
+	@echo " CODACP ${BASENAME}Lib.h"
+	${Q}cp ${PWD}/${BASENAME}Lib.h $(CODA_VME)/include
 
 %.d: %.c
 	@echo " DEP    $@"

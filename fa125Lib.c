@@ -208,7 +208,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 #ifdef VXWORKS
   res = sysBusToLocalAdrs(0x39,(char *)fa125AddrList[0],(char **)&laddr);
 #else
-  res = vmeBusToLocalAdrs(0x39,(char *)fa125AddrList[0],(char **)&laddr);
+  res = vmeBusToLocalAdrs(0x39,(char *)(unsigned long)fa125AddrList[0],(char **)&laddr);
 #endif
 
   if (res != 0)
@@ -239,7 +239,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
       fa125A32Offset = laddr - fa125A32Base;
     }
 #else
-  res = vmeBusToLocalAdrs(0x09,(char *)fa125A32Base,(char **)&laddr);
+  res = vmeBusToLocalAdrs(0x09,(char *)(unsigned long)fa125A32Base,(char **)&laddr);
   if (res != 0)
     {
       printf("\n%s: ERROR in vmeBusToLocalAdrs(0x09,0x%x,&laddr) \n\n",
@@ -414,7 +414,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	  return(ERROR);
 	}
 #else
-      res = vmeBusToLocalAdrs(0x09,(char *)a32addr,(char **)&laddr);
+      res = vmeBusToLocalAdrs(0x09,(char *)(unsigned long)a32addr,(char **)&laddr);
       if (res != 0)
 	{
 	  printf("\n%s: ERROR in vmeBusToLocalAdrs(0x09,0x%x,&laddr) \n\n",
@@ -445,7 +445,7 @@ fa125Init (UINT32 addr, UINT32 addr_inc, int nadc, int iFlag)
 	  return(ERROR);
 	}
 #else
-      res = vmeBusToLocalAdrs(0x09,(char *)a32addr,(char **)&laddr);
+      res = vmeBusToLocalAdrs(0x09,(char *)(unsigned long)a32addr,(char **)&laddr);
       if (res != 0)
 	{
 	  printf("\n%s: ERROR in vmeBusToLocalAdrs(0x09,0x%x,&laddr) \n\n",__FUNCTION__,a32addr);
@@ -566,7 +566,8 @@ fa125Status(int id, int pflag)
   struct fa125_a24_proc p;
   struct fa125_a24_fe   f[12];
   unsigned int clksrc, trigsrc, srsrc;
-  unsigned int faBase, a32Base, ambMin, ambMax;
+  unsigned long faBase;
+  unsigned int a32Base, ambMin, ambMax;
   int i=0, showregs=0, sign=1;
 
   if(id==0) id=fa125ID[0];
@@ -627,7 +628,7 @@ fa125Status(int id, int pflag)
     }
   FA125UNLOCK;
 
-  faBase  = (unsigned int) &fa125p[id]->main.id;
+  faBase  = (unsigned long) &fa125p[id]->main.id;
   a32Base = (m.adr32 & FA125_ADR32_BASE_MASK)<<16;
   ambMin  = (m.adr_mb & FA125_ADRMB_MIN_MASK)<<16;
   ambMax  = (m.adr_mb & FA125_ADRMB_MAX_MASK);
@@ -839,7 +840,7 @@ fa125GStatus(int pflag)
   for (ifa=0;ifa<nfa125;ifa++)
     {
       id = fa125Slot(ifa);
-      a24addr[id]    = (unsigned int)fa125p[id] - fa125A24Offset;
+      a24addr[id]    = (unsigned int)((unsigned long)fa125p[id] - fa125A24Offset);
 
       m[id].version     = vmeRead32(&fa125p[id]->main.version);
       m[id].adr32       = vmeRead32(&fa125p[id]->main.adr32);
@@ -1650,6 +1651,10 @@ fa125PrintTimingThresholds(int id)
   for(ichan=0; ichan<FA125_MAX_ADC_CHANNELS; ichan++)
     {
       rval = fa125GetTimingThreshold(id, ichan, &lo[ichan], &hi[ichan]);
+      if(rval != OK)
+	{
+	  return ERROR;
+	}
     }
 
   printf("%s:\n\n",__FUNCTION__);
@@ -2646,7 +2651,8 @@ fa125Poll(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",
+	     __FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2717,7 +2723,7 @@ fa125Clear(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2743,7 +2749,7 @@ fa125Enable(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2775,7 +2781,7 @@ fa125Disable(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2808,7 +2814,7 @@ fa125Reset(int id, int reset)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2847,7 +2853,7 @@ fa125ResetCounters(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2874,7 +2880,7 @@ fa125ResetToken(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -2955,7 +2961,7 @@ fa125SetBlocklevel(int id, int blocklevel)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -3164,7 +3170,7 @@ fa125SoftTrigger(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized \n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -3590,7 +3596,7 @@ fa125ReadBlockStatus(int pflag)
 int
 fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 {
-  int ii, blknum;
+  int ii;
   int stat, retVal, xferCount, rmode, async;
   int dCnt, berr=0;
   int dummy=0;
@@ -3772,7 +3778,6 @@ fa125ReadBlock(int id, volatile UINT32 *data, int nwrds, int rflag)
 #endif
       if((bhead&FA125_DATA_TYPE_DEFINE)&&((bhead&FA125_DATA_TYPE_MASK) == FA125_DATA_BLOCK_HEADER))
 	{
-	  blknum = bhead&FA125_DATA_BLKNUM_MASK;
 	  ehead = fa125pd[id]->data;
 #ifndef VXWORKS
 	  ehead = LSWAP(ehead);
@@ -3910,7 +3915,7 @@ fa125GetA32(int id)
   unsigned int rval = 0;
   if(fa125pd[id])
     {
-      rval = (unsigned int)fa125pd[id] - fa125A32Offset;
+      rval = (unsigned int)((unsigned long)fa125pd[id] - fa125A32Offset);
     }
   else
     {
@@ -3934,7 +3939,7 @@ fa125GetA32M()
   unsigned int rval = 0;
   if(FA125pmb)
     {
-      rval = (unsigned int)FA125pmb - fa125A32Offset;
+      rval = (unsigned int)((unsigned long)FA125pmb - fa125A32Offset);
     }
   else
     {
@@ -4371,7 +4376,7 @@ fa125FirmwareWaitForReady(int id, int nwait, int *rwait)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4405,7 +4410,7 @@ fa125FirmwareBlockErase(int id, int iblock, int stayon, int waitForDone)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4468,7 +4473,7 @@ fa125FirmwareWriteToBuffer(int id, int ipage)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4525,7 +4530,7 @@ fa125FirmwarePushBufferToMain(int id, int ipage, int waitForDone)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4569,7 +4574,7 @@ fa125FirmwareWaitForPushBufferToMain(int id, int ipage)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4616,7 +4621,7 @@ fa125FirmwareReadMainPage(int id, int ipage, int stayon)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4684,7 +4689,7 @@ fa125FirmwareReadBuffer(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -4736,7 +4741,7 @@ fa125FirmwareVerifyFull(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -5168,7 +5173,7 @@ fa125FirmwareEraseFull(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -5448,7 +5453,7 @@ fa125FirmwareWriteFull(int id)
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
@@ -5565,7 +5570,7 @@ fa125FirmwareGWriteFull()
 
   if((id<0) || (id>21) || (fa125p[id] == NULL))
     {
-      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",(int)__FUNCTION__,id,3,4,5,6);
+      logMsg("\n%s: ERROR : FA125 in slot %d is not initialized\n\n",__FUNCTION__,id,3,4,5,6);
       return ERROR;
     }
 
