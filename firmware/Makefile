@@ -3,83 +3,75 @@
 #    Makefile
 #
 # Description:
-#    Makefile for firmware updating of the fADC125
+#    Makefile for fa125 firmware updating program
 #
 #
-# $Date$
-# $Rev$
+DEBUG	?= 1
+QUIET	?= 1
 #
-
-ifndef ARCH
-	ifdef LINUXVME_LIB
-		ARCH=Linux
-	else
-		ARCH=VXWORKSPPC
-	endif
+ifeq ($(QUIET),1)
+        Q = @
+else
+        Q =
 endif
 
-FWFILES	= $(shell cat .currentfw)
+ARCH	?= $(shell uname -m)
+OS	?= LINUX
 
-# Defs and build for VxWorks
-ifeq ($(ARCH),VXWORKSPPC)
-VXWORKS_ROOT = /site/vxworks/5.5/ppc/target
+ifdef CODA_VME
+CODA_VME_INC = -I${CODA_VME}/include
+endif
+ifdef CODA_VME_LIB
+CODA_LIB = -L${CODA_VME_LIB}
+endif
 
-CC			= ccppc
-LD			= ldppc
-DEFS			= -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall \
-				-fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
-INCS			= -I. -I../ -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
-CFLAGS			= $(INCS) $(DEFS)
-OBJS			= fa125FirmwareUpdate.o
-PROGS			=
-endif #ARCH=VXWORKSPPC#
+# linuxvme defaults, if they're not already defined
+LINUXVME_INC	?= ../../include
+LINUXVME_LIB	?= ../../lib
+LINUXVME_BIN	?= ../../bin
 
-# Defs and build for Linux
-ifeq ($(ARCH),Linux)
-
-LINUXVME_LIB	?= ${CODA}/linuxvme/lib
-LINUXVME_INC	?= ${CODA}/linuxvme/include
-LINUXVME_BIN    ?= ${CODA}/linuxvme/bin
-LINUXVME_FW     ?= ${CODA}/linuxvme/firmware
-
+CROSS_COMPILE		=
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -Wall -O2 -I${LINUXVME_INC} -I. -I/usr/include \
-			  -L${LINUXVME_LIB} -L.
-OBJS			=
-PROGS			= fa125FirmwareUpdate fa125GFirmwareUpdate
+INCS			= -I. -I../ -I${LINUXVME_INC} ${CODA_VME_INC}
+CFLAGS			= -L. -L../ -L${LINUXVME_LIB} ${CODA_LIB} -lrt -ljvme -lfa125
+ifeq ($(DEBUG),1)
+	CFLAGS		+= -Wall -g
 endif
 
-ifeq ($(ARCH),VXWORKSPPC)
-all: $(OBJS)
-else
-all: $(PROGS)
-endif
+SRC			= $(wildcard *.c)
+DEPS			= $(SRC:.c=.d)
+OBJ			= $(SRC:.c=.o)
+PROGS			= $(SRC:.c=)
 
-clean:
-	@rm -vf $(PROGS) $(OBJS) *~
+all: echoarch $(PROGS)
+
+clean distclean:
+	@rm -f $(PROGS) *~ $(OBJS) $(DEPS)
 
 %: %.c
-	@echo "Making $@ for $(ARCH)"
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125
+	@echo " CC     $@"
+	${Q}$(CC) $(CFLAGS) $(INCS) -o $@ $<
 
-ifeq ($(ARCH),VXWORKSPPC)
-fa125FirmwareUpdate.o: fa125FirmwareUpdate.c
-	@echo "Making $@ for $(ARCH)"
-	$(CC) $(CFLAGS) -c -o $@ $(<)
-else
+%.d: %.c
+	@echo " DEP    $@"
+	@set -e; rm -f $@; \
+	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1 $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
 
 install: $(PROGS)
-	@echo "Installing $(PROGS)"
-	@install -v -d $(LINUXVME_BIN)
-	@install -v -p $(PROGS) -D $(LINUXVME_BIN)/
+	@echo " CP     ${PROGS}"
+	${Q}cp ${PWD}/$(PROGS) $(LINUXVME_BIN)/
 
-fwinstall:
-	@ln -sf $(FWFILES) fa125_current_firmware.mcs
-	@install -v -d $(LINUXVME_FW)/fa125
-	@install -p -m 664 -v $(FWFILES) fa125_current_firmware.mcs -D $(LINUXVME_FW)/fa125
+coda_install: $(PROGS)
+	@echo " CODACP ${PROGS}"
+	${Q}cp ${PWD}/$(PROGS) $(CODA_VME_BIN)/
 
-endif
+-include $(DEPS)
 
-.PHONY: all clean
+.PHONY: all clean distclean
+
+echoarch:
+	@echo "Make for $(OS)-$(ARCH)"

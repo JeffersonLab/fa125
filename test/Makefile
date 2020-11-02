@@ -3,46 +3,66 @@
 #    Makefile
 #
 # Description:
-#    Makefile for the JLAB extensions to the LINUXVME Controller API
+#    Makefile for the fa125 test programs
 #
+DEBUG	?= 1
+QUIET	?= 1
 #
-# $Date$
-# $Rev$
-#
+ifeq ($(QUIET),1)
+        Q = @
+else
+        Q =
+endif
 
-ifndef LINUXVME_LIB
-	LINUXVME_LIB	= ${CODA}/extensions/linuxvme/libs
+ARCH	?= $(shell uname -m)
+OS	?= LINUX
+
+ifdef CODA_VME
+CODA_VME_INC = -I${CODA_VME}/include
 endif
-ifndef LINUXVME_INC
-	LINUXVME_INC	= ${CODA}/extensions/linuxvme/include
+ifdef CODA_VME_LIB
+CODA_LIB = -L${CODA_VME_LIB}
 endif
+
+# linuxvme defaults, if they're not already defined
+LINUXVME_INC	?= ../../include
+LINUXVME_LIB	?= ../../lib
+LINUXVME_BIN	?= ../../bin
 
 CROSS_COMPILE		=
 CC			= $(CROSS_COMPILE)gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -Wall -g -O2 \
-				-I. -I${LINUXVME_INC} \
-				-L. -L${LINUXVME_LIB}
+INCS			= -I. -I../ -I${LINUXVME_INC} ${CODA_VME_INC}
+CFLAGS			= -L. -L../ -L${LINUXVME_LIB} ${CODA_LIB} -lrt -ljvme -lsd -lti -lts -lfa125
+ifeq ($(DEBUG),1)
+	CFLAGS		+= -Wall -g
+endif
 
-PROGS			= fa125LibTest fa125SelfTriggerTest
+SRC			= $(wildcard *.c)
+DEPS			= $(SRC:.c=.d)
+OBJ			= $(SRC:.c=.o)
+PROGS			= $(SRC:.c=)
 
-
-all: $(PROGS)
-
-adc125LibTest.o: adc125LibTest.c
-	$(CC) -c $(CFLAGS) $(INCS) -o $@ $<
-
-adc125LibTest2.o: adc125LibTest2.c
-	$(CC) -c $(CFLAGS) $(INCS) -o $@ $<
-
-fa125ReadoutTest_write: fa125ReadoutTest_write.c
-	$(CC) $(CFLAGS) $(INCS) -lsd -lrt -ljvme -lfa125 -lti -lts -o $@ $<
+all: echoarch $(PROGS)
 
 clean distclean:
-	@rm -f $(PROGS) *~ *.so
+	@rm -f $(PROGS) *~ $(OBJS) $(DEPS)
 
 %: %.c
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c) -lrt -ljvme -lfa125 -lti -lts -lsd -lctp -lf1tm
+	@echo " CC     $@"
+	${Q}$(CC) $(CFLAGS) $(INCS) -o $@ $<
+
+%.d: %.c
+	@echo " DEP    $@"
+	@set -e; rm -f $@; \
+	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1 $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(DEPS)
 
 .PHONY: all clean distclean
+
+echoarch:
+	@echo "Make for $(OS)-$(ARCH)"
