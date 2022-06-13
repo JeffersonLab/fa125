@@ -2,12 +2,18 @@
 #include "fa125Config.h"
 
 extern unsigned int fa125AddrList[FA125_MAX_BOARDS];
-extern int32_t nfadc125;
+extern int32_t nfa125;
 int32_t FA_SLOT;
 
 int32_t NFADC_125;
 FADC125_CONF fa125[FA125_MAX_BOARDS];
 uint32_t trig_delay = 0; /* Extra delay to add to the config value */
+
+// compile in a default configuration for testing
+#include "fa125_config.c"
+
+// prototype defined way below
+void fa125_config_init();
 
 // To be defined in fa125Config.{c,h}
 #define print_fadc125_conf(x)
@@ -20,12 +26,16 @@ fa125_download()
   int stat;
   int debug_init = 0;
 
+  fa125_config_init();
+
+  fa125[5] = fa125_testboard;
+
   for(slot = 3; slot < 21; slot++)
     {
       if(fa125[slot].group == 1)
 	{
-	  fa125AddrList[nfadc125] = (slot << 19);
-	  nfadc125++;
+	  fa125AddrList[nfa125] = (slot << 19);
+	  nfa125++;
 
 	  print_fadc125_conf(slot);
 
@@ -33,7 +43,7 @@ fa125_download()
     }
 
   printf(" NUMBER OF FADC125  boards found in config file =  %d \n",
-	 nfadc125);
+	 nfa125);
 
   int iFlag = 0;
 
@@ -55,7 +65,7 @@ fa125_download()
   iFlag |= (1 << 4);		/* Clock Source */
   iFlag |= (1 << 18);		/* Skip firmware check */
 
-  stat = fa125Init(0, 0, nfadc125, iFlag);
+  stat = fa125Init(0, 0, nfa125, iFlag);
 
   if(stat != OK)
     {
@@ -63,7 +73,7 @@ fa125_download()
       return -1;
     }
 
-  NFADC_125 = nfadc125;		/* Redefine our NFADC with what was found from the driver */
+  NFADC_125 = nfa125;		/* Redefine our NFADC with what was found from the driver */
 
   printf(" NUMBER OF FADC125  initialized  %d \n", NFADC_125);
 
@@ -309,8 +319,8 @@ fa125_download()
 	     (~fa125[FA_SLOT].ch_disable[2] & 0xFFFFFF));
 
       printf("\n");
-      printf("Threshold factor = %f \n",
-	     fa125[FA_SLOT].thr_fact);
+      /* printf("Threshold factor = %f \n", */
+      /* 	     fa125[FA_SLOT].thr_fact); */
       printf("\n");
 
 
@@ -403,6 +413,7 @@ fa125_download()
 
   return (0);
 
+
 }
 
 
@@ -456,5 +467,115 @@ fa125_go()
   sdStatus(0);
 
   return (0);
+
+}
+
+int
+fa125_end()
+{
+  int32_t islot;
+  for(islot = 0; islot < NFADC_125; islot++)
+    {
+      FA_SLOT = fa125Slot(islot);
+      fa125Disable(FA_SLOT);
+
+    }
+  fa125GStatus(1);
+
+  return OK;
+}
+
+int
+fa125_trigger(int arg)
+{
+  int32_t rflag=1;
+  int32_t iread = 0, timeout = 100;
+  int32_t faslot = 0, iadc = 0;
+  int32_t dCnt;
+
+  if(nfa125>1) rflag=2;
+  printf("Check for BReady\n");
+  for(iread=0; iread<timeout; iread++)
+    {
+      if(fa125GBready(faslot)==fa125ScanMask())
+	break;
+    }
+  printf("Check for Timeout\n");
+  if(iread==timeout)
+    {
+      printf("fa125 (%d) timeout  (fa125GBready: 0x%08x != 0x%08x)\n",faslot,
+	     fa125GBready(faslot), fa125ScanMask());
+      /* 	  fa125SGtatus(); */
+    }
+  else
+    {
+      printf("Readout\n");
+      /* 	  for(iadc=0; iadc<nfa125; iadc++) */
+      /* 	    { */
+      /* 	      rflag=1; */
+      faslot = fa125Slot(iadc);
+      dCnt = fa125ReadBlock(faslot,(volatile UINT32 *)dma_dabufp,0x3000,rflag);
+      if(dCnt<=0)
+	{
+	  printf("No fa125 (%d) data or error.  dCnt = %d\n",faslot,dCnt);
+	}
+      else
+	{
+	  dma_dabufp += dCnt;
+	}
+      /* 	    } */
+    }
+  fa125ResetToken(fa125Slot(0));
+
+  return OK;
+}
+
+void
+fa125_config_init()
+{
+
+  int bd_slot, bd_ch, range, NBD_FADC125 = 21;
+  for(bd_slot = 3; bd_slot < NBD_FADC125; bd_slot++){
+
+    fa125[bd_slot].group     = -1;
+    fa125[bd_slot].mode      =  1;
+    fa125[bd_slot].winOffset =  500;
+    fa125[bd_slot].winWidth  =  100;
+    fa125[bd_slot].nsb       =  3;
+    fa125[bd_slot].nsa       =  7;
+    fa125[bd_slot].npeak     =  1;
+
+    fa125[bd_slot].IE        =  80;
+    fa125[bd_slot].PG        =  4;
+
+    fa125[bd_slot].P1        =  4;
+    fa125[bd_slot].P2        =  4;
+
+    fa125[bd_slot].TH        =  100;
+    fa125[bd_slot].TL        =  25;
+
+    fa125[bd_slot].IBIT      =  4;
+    fa125[bd_slot].ABIT      =  3;
+    fa125[bd_slot].PBIT      =  0;
+
+
+    fa125[bd_slot].thr_fact  =  0;
+
+    fa125[bd_slot].busy      =  3;
+    fa125[bd_slot].stop      =  6;
+
+    fa125[bd_slot].data_format  =  0;
+
+    for(range = 0; range < 3; range++) fa125[bd_slot].ch_disable[range] = 0;
+
+    for(bd_ch = 0; bd_ch < MAX_FADC125_CH; bd_ch++){
+      fa125[bd_slot].dac[bd_ch]      =  0x9000;
+      fa125[bd_slot].read_thr[bd_ch] =  0xFFFF;
+
+      fa125[bd_slot].sig[bd_ch]  =  0;
+      fa125[bd_slot].bl[bd_ch]   =  0;
+
+    }
+  }
 
 }

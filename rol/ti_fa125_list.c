@@ -31,7 +31,11 @@
 #include "dmaBankTools.h"   /* Macros for handling CODA banks */
 #include "tiprimary_list.c" /* Source required for CODA readout lists using the TI */
 #include "sdLib.h"
+
+#define USE_FA125
+#ifdef USE_FA125
 #include "fa125_include.c"  /* fa125 readout list routines */
+#endif
 
 /* Define initial blocklevel and buffering level */
 #define BLOCKLEVEL 1
@@ -110,6 +114,10 @@ rocDownload()
 
   tiStatus(0);
 
+#ifdef USE_FA125
+  fa125_download();
+#endif
+
   printf("rocDownload: User Download Executed\n");
 
 }
@@ -122,6 +130,10 @@ rocPrestart()
 {
 
   tiStatus(0);
+
+#ifdef USE_FA125
+  fa125_prestart();
+#endif
 
   printf("rocPrestart: User Prestart Executed\n");
 
@@ -198,6 +210,9 @@ rocGo()
     }
 #endif
 
+#ifdef USE_FA125
+  fa125_go();
+#endif
 
 }
 
@@ -223,6 +238,11 @@ rocEnd()
 #endif
 
   tiStatus(0);
+
+#ifdef USE_FA125
+  fa125_end();
+#endif
+
 
   printf("rocEnd: Ended after %d blocks\n",tiGetIntCount());
 
@@ -251,6 +271,11 @@ rocTrigger(int arg)
     { /* TI Data is already in a bank structure.  Bump the pointer */
       dma_dabufp += dCnt;
     }
+
+#ifdef USE_FA125
+  fa125_trigger(arg);
+#endif
+
 
   /* Set TI output 0 low */
   tiSetOutputPort(0,0,0,0);
