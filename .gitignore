@@ -1,0 +1,8 @@
+*~
+*.so
+*.a
+*.o
+*.d
+*.d.*
+doc/*
+.tramp_history

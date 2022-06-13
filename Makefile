@@ -72,7 +72,7 @@ else
 CFLAGS			+= -O2
 endif
 SRC			= ${BASENAME}Lib.c
-HDRS			= $(SRC:.c=.h)
+HDRS			= ${BASENAME}Lib.h ${BASENAME}Config.h
 OBJ			= ${BASENAME}Lib.o
 DEPS			= $(SRC:.c=.d)
 
@@ -102,16 +102,16 @@ install: $(LIBS)
 	${Q}cp $(PWD)/$< $(LINUXVME_LIB)/$<
 	@echo " CP     $(<:%.a=%.so)"
 	${Q}cp $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
-	@echo " CP     ${BASENAME}Lib.h"
-	${Q}cp ${PWD}/${BASENAME}Lib.h $(LINUXVME_INC)
+	@echo " CP     ${HDRS}"
+	${Q}cp ${PWD}/${HDRS} $(LINUXVME_INC)
 
 coda_install: $(LIBS)
 	@echo " CODACP $<"
 	${Q}cp $(PWD)/$< $(CODA_VME_LIB)/$<
 	@echo " CODACP $(<:%.a=%.so)"
 	${Q}cp $(PWD)/$(<:%.a=%.so) $(CODA_VME_LIB)/$(<:%.a=%.so)
-	@echo " CODACP ${BASENAME}Lib.h"
-	${Q}cp ${PWD}/${BASENAME}Lib.h $(CODA_VME)/include
+	@echo " CODACP ${HDRS}"
+	${Q}cp ${PWD}/${HDRS} $(CODA_VME)/include
 
 %.d: %.c
 	@echo " DEP    $@"
