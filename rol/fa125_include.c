@@ -521,7 +521,9 @@ fa125_trigger(int arg)
 	}
       else
 	{
+	  BANKOPEN(125, BT_UI4, 1);
 	  dma_dabufp += dCnt;
+	  BANKCLOSE;
 	}
       /* 	    } */
     }
